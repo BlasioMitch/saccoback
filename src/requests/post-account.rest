@@ -1,0 +1,11 @@
+POST http://localhost:3001/api/auth/accounts
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIzOTA1ZGQwZC0xNWZkLTRmNDMtYjYxYi0zMjllOGVjMDIzZWYiLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzQ1NDEwNjExLCJleHAiOjE3NDU0OTcwMTF9.6oLGJ7I3TAXUCh9Wh3M_hY8a-UpgRIXeo1ZnGoiWjpw
+
+{
+    "userId": "8e06bf94-4603-450d-8e1a-37f80e6cd143",
+    "balance": 2000000,
+    "account_type": "SAVINGS",
+    "status": "ACTIVE",
+    "paidMembership": false,
+}

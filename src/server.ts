@@ -1,0 +1,89 @@
+import express from 'express';
+import cors, {CorsOptions} from 'cors';
+import { syncDatabase } from './models/index.js';
+import authRoutes from './routes/auth.js';
+import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
+
+const app = express();
+const port = process.env.PORT || 3001;
+const NODE_ENV = process.env.NODE_ENV || 'development';
+
+// Request logging middleware
+const requestLogger = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const timestamp = new Date().toISOString();
+  const method = req.method;
+  const url = req.url;
+  const body = req.body && Object.keys(req.body).length > 0 ? JSON.stringify(req.body, null, 2) : 'No body';
+  
+  console.log(`
+[${timestamp}] ${method} ${url}
+Body: ${body}
+----------------------------------------
+  `);
+  
+  next();
+};
+
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
+  'http://localhost:3000',
+  'http://localhost:3002',
+  'http://localhost:5173'
+];
+
+// CORS configuration
+const corsOptions: CorsOptions = {
+  origin: (origin, callback) =>{ // Allow your frontend URL
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, origin);
+    }
+    else {
+      console.error(`CORS error: ${origin} not allowed`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  // origin: '*', // Allow all origins for development
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS','PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true, // Allow cookies and authentication headers
+};
+
+// Middleware
+app.use(cors(corsOptions));
+app.use(express.json());
+app.use(requestLogger); // Add request logging middleware
+
+// Routes
+app.use('/api/auth', authRoutes);
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
+// Start server
+const startServer = async () => {
+  try {
+    if (NODE_ENV === 'development') {
+      console.log('Syncing database in development mode...');
+      await syncDatabase();
+    }
+    
+    app.listen(port, () => {
+      console.log(`
+Server started successfully!
+Environment: ${NODE_ENV}
+Port: ${port}
+Time: ${new Date().toISOString()}
+----------------------------------------
+      `);
+    });
+  } catch (error) {
+    console.error('Error starting server:', error);
+    process.exit(1);
+  }
+};
+
+startServer(); 

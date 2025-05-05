@@ -1,0 +1,17 @@
+
+POST http://localhost:3001/api/auth/loans
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIzOTA1ZGQwZC0xNWZkLTRmNDMtYjYxYi0zMjllOGVjMDIzZWYiLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzQ1NDEwNjExLCJleHAiOjE3NDU0OTcwMTF9.6oLGJ7I3TAXUCh9Wh3M_hY8a-UpgRIXeo1ZnGoiWjpw
+
+{
+    "accountId": "bc71bc99-a0a1-4146-87f4-50d791a0035f",
+    "amount": 2000000,
+    "interestRate": 7,
+    "term": 12,
+    "status": "ACTIVE",
+    "monthlyPayment": 20000,
+    "totalInterest": 10000,
+    "remainingBalance": 500000,
+    "startDate": "2023-01-01",
+    "endDate": "2024-01-01"
+}
