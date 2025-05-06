@@ -3,15 +3,19 @@ import Account from './account.js';
 import Transaction from './transaction.js';
 import Loan from './loan.js';
 import Payment from './payment.js';
+import LoanSummary from './loanSummary.js';
 import sequelize from '../lib/sequelize.js';
 
-export const models = {
+const models = {
     User,
     Account,
     Transaction,
     Loan,
-    Payment
+    Payment,
+    LoanSummary
 };
+
+export { models };
 
 // Set up associations
 models.User.hasMany(models.Account, { foreignKey: 'userId', as: 'accounts' });
@@ -25,6 +29,10 @@ models.Loan.belongsTo(models.Account, { foreignKey: 'accountId', as: 'account' }
 
 models.Account.hasMany(models.Payment, { foreignKey: 'accountId', as: 'payments' });
 models.Payment.belongsTo(models.Account, { foreignKey: 'accountId', as: 'account' });
+
+// Loan and LoanSummary associations
+models.Loan.hasOne(models.LoanSummary, { foreignKey: 'loanId', as: 'summary' });
+models.LoanSummary.belongsTo(models.Loan, { foreignKey: 'loanId', as: 'loan' });
 
 export const syncDatabase = async () => {
     try {

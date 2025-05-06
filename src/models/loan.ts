@@ -2,6 +2,7 @@ import { Model, DataTypes } from 'sequelize';
 import { BaseModel, baseAttributes } from './base.js';
 import sequelize from '../lib/sequelize.js';
 import Account from './account.js';
+import LoanSummary from './loanSummary.js';
 
 export enum LoanStatus {
   ACTIVE = 'ACTIVE',
@@ -15,9 +16,6 @@ interface LoanAttributes {
   interestRate: number;
   term: number;
   status: LoanStatus;
-  monthlyPayment?: number;
-  totalInterest?: number;
-  remainingBalance?: number;
   startDate: Date;
   endDate: Date;
 }
@@ -28,9 +26,6 @@ class Loan extends BaseModel<LoanAttributes> implements LoanAttributes {
   public interestRate!: number;
   public term!: number;
   public status!: LoanStatus;
-  public monthlyPayment!: number;
-  public totalInterest!: number;
-  public remainingBalance!: number;
   public startDate!: Date;
   public endDate!: Date;
 }
@@ -63,18 +58,6 @@ Loan.init(
       allowNull: false,
       defaultValue: LoanStatus.ACTIVE,
     },
-    monthlyPayment: {
-      type: DataTypes.DECIMAL(10, 2),
-      allowNull: true,
-    },
-    totalInterest: {
-      type: DataTypes.DECIMAL(10, 2),
-      allowNull: true,
-    },
-    remainingBalance: {
-      type: DataTypes.DECIMAL(10, 2),
-      allowNull: true,
-    },
     startDate: {
       type: DataTypes.DATE,
       allowNull: false,
@@ -94,5 +77,6 @@ Loan.init(
 // Define associations
 Loan.belongsTo(Account, { foreignKey: 'accountId', as: 'loanAccount' });
 Account.hasMany(Loan, { foreignKey: 'accountId', as: 'accountLoans' });
+Loan.hasOne(LoanSummary, { foreignKey: 'loanId', as: 'summary' });
 
 export default Loan;

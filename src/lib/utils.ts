@@ -32,5 +32,24 @@ export async function generateUniqueAccountNumber(firstName: string, lastName: s
   return accountNumber;
 }
 
+// Calculate Monthly Payment
+export function calculateMonthlyPayment(amount: number, interestRate: number, term: number): number {
+  const monthlyPayment = amount * (1 + interestRate / 100) / term;
+  return monthlyPayment;
+}
+
+// Calculate Total Interest
+export function calculateTotalInterest(amount: number, interestRate: number, term: number): number {
+  const totalInterest = amount *  interestRate / 100
+  return totalInterest;
+}
+
+// Calculate Remaining Balance
+export function calculateRemainingBalance(CurrentAmount: number, transactionAmount: number): number {
+  const remainingBalance = CurrentAmount - transactionAmount;
+  return remainingBalance;
+}
+
+
 
 // export default generateUniqueAccountNumber

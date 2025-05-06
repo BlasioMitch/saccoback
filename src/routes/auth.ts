@@ -3,8 +3,8 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { models } from '../models/index.js';
 import { generateUniqueAccountNumber } from '../lib/utils.js';
-import { where } from 'sequelize';
-// import generateUniqueAccountNumber from '../lib/utils.js';
+import { calculateMonthlyPayment, calculateTotalInterest, calculateRemainingBalance } from '../lib/utils.js';
+import { LoanStatus } from '../models/loan.js';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -518,7 +518,7 @@ router.post('/transactions', async (req, res) => {
     if (!account) {
       return res.status(404).json({ error: 'Account not found' });
     }
-    // Create new transaction
+    // Create new transaction and update according to the type
     const newTransaction = await models.Transaction.create({
       accountId,
       accountName: account.accountNumber,
@@ -527,6 +527,44 @@ router.post('/transactions', async (req, res) => {
       status,
       loanId
     });
+
+    // Update the loan summary for loan payments
+    if (type === 'LOAN_PAYMENT' && loanId) {
+      const loanSummary = await models.LoanSummary.findByPk(loanId);
+      if (!loanSummary) {
+        return res.status(404).json({ error: 'Loan summary not found' });
+      }
+      
+      // Update remaining balance
+      const newRemainingBalance = calculateRemainingBalance(loanSummary.remainingBalance, amount);
+      
+      // Update loan summary
+      await loanSummary.update({
+        remainingBalance: newRemainingBalance,
+      });
+
+      // If remaining balance is 0, update loan status to PAID
+      if (newRemainingBalance <= 0) {
+        const loan = await models.Loan.findByPk(loanId);
+        if (loan) {
+          await loan.update({ status: LoanStatus.PAID });
+          await models.Account.update(
+            { hasLoan: false },
+            { where: { id: loan.accountId as string } }
+          );
+        }
+      }
+    } else if (newTransaction.type === 'MEMBERSHIP_FEE' || 
+        newTransaction.type === 'ACCOUNT_WITHDRAW' || 
+        newTransaction.type === 'CLOSURE_WITHDRAW') {
+      await account.update({
+        balance: Number(account.balance) - Number(amount),
+      });
+    } else if (newTransaction.type === 'SAVINGS_DEPOSIT') {
+      await account.update({
+        balance: Number(account.balance) + Number(amount),
+      });
+    }
     // Return created transaction
     res.status(201).json(newTransaction);
   } catch (error) {
@@ -584,18 +622,51 @@ router.patch('/transactions/:id', async (req, res) => {
       return res.status(401).json({ error: 'No token provided' });
     }
     const { id } = req.params;
-    const { accountId, type, amount, status } = req.body;
+    const { accountId, type, amount, status, loanId } = req.body;
     // Find transaction by ID
     const transaction = await models.Transaction.findByPk(id);
     if (!transaction) {
       return res.status(404).json({ error: 'Transaction not found' });
     }
+
+    // If this is a loan payment, update the loan summary
+    if (type === 'LOAN_PAYMENT' && loanId) {
+      const loanSummary = await models.LoanSummary.findByPk(loanId);
+      if (!loanSummary) {
+        return res.status(404).json({ error: 'Loan summary not found' });
+      }
+
+      // Calculate the difference in amount
+      const amountDifference = amount - transaction.amount;
+      
+      // Update remaining balance
+      const newRemainingBalance = calculateRemainingBalance(loanSummary.remainingBalance, amountDifference);
+      
+      // Update loan summary
+      await loanSummary.update({
+        remainingBalance: newRemainingBalance,
+      });
+
+      // If remaining balance is 0, update loan status to PAID
+      if (newRemainingBalance <= 0) {
+        const loan = await models.Loan.findByPk(loanId);
+        if (loan) {
+          await loan.update({ status: LoanStatus.PAID });
+          await models.Account.update(
+            { hasLoan: false },
+            { where: { id: loan.accountId as string } }
+          );
+        }
+      }
+    }
+
     // Update transaction
     await transaction.update({
       accountId,
       type,
       amount,
       status,
+      loanId
     });
     // Return updated transaction
     const updatedTransaction = await models.Transaction.findByPk(id, {
@@ -690,7 +761,20 @@ router.post('/loans', async (req, res) => {
       { hasLoan: true },
       { where: { id: accountId as string } }
     );
+
+    // Calculate Loan Sumamry
+    const monthlyPayment = calculateMonthlyPayment(amount, interestRate, term);
+    const totalInterest = calculateTotalInterest(amount, interestRate, term);
+    const remainingBalance = calculateRemainingBalance( amount, 0 );
+
+    await models.LoanSummary.create({
+      loanId: newLoan.id,
+      monthlyPayment,
+      totalInterest,
+      remainingBalance,
+    });
     // Return created loan
+    // Display the Acount details, withinit the owner; and the loan summary
     const loan = await models.Loan.findByPk(
       newLoan.id,
       {
@@ -706,6 +790,11 @@ router.post('/loans', async (req, res) => {
               attributes: ['first_name', 'last_name', 'other_name'],
             },
           ],
+        },
+        {
+          model: models.LoanSummary,
+          as: 'summary',
+          attributes: ['monthlyPayment', 'totalInterest', 'remainingBalance'],
         },
       ],
     });
@@ -772,7 +861,7 @@ router.patch('/loans/:id', async (req, res) => {
       return res.status(401).json({ error: 'No token provided' });
     }
     const { id } = req.params;
-    const { accountId, amount, interestRate, term, status, monthlyPayment, totalInterest, remainingBalance, startDate, endDate } = req.body;
+    const { accountId, amount, interestRate, term, status,startDate, endDate } = req.body;
     // Find loan by ID
     const loan = await models.Loan.findByPk(id);
     if (!loan) {
@@ -795,9 +884,6 @@ router.patch('/loans/:id', async (req, res) => {
       interestRate,
       term,
       status,
-      monthlyPayment,
-      totalInterest,
-      remainingBalance,
       startDate,
       endDate,
     });
@@ -815,6 +901,11 @@ router.patch('/loans/:id', async (req, res) => {
               attributes: ['first_name', 'last_name', 'other_name'],
             },
           ],
+        },
+        {
+          model: models.LoanSummary,
+          as: 'summary',
+          attributes: ['monthlyPayment', 'totalInterest', 'remainingBalance'],
         },
       ],
     });
