@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon ",
     "build": "tsc",
-    "start": "node dist/server.ts",
+    "start": "node dist/server.js",
     "db:seed": "NODE_OPTIONS='--loader ts-node/esm --experimental-specifier-resolution=node' node src/seed.ts",
     "db:reset": "NODE_OPTIONS='--loader ts-node/esm --experimental-specifier-resolution=node' node src/seed.ts"
   },
