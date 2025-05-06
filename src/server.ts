@@ -1,6 +1,7 @@
 import express from 'express';
 import cors, {CorsOptions} from 'cors';
 import { syncDatabase } from './models/index.js';
+import { seedDatabase } from 'seed.js';
 import authRoutes from './routes/auth.js';
 import dotenv from 'dotenv';
 
@@ -66,9 +67,9 @@ app.get('/health', (req, res) => {
 // Start server
 const startServer = async () => {
   try {
-    if (NODE_ENV === 'development') {
-      console.log('Syncing database in development mode...');
-      await syncDatabase();
+    await syncDatabase();
+    if (NODE_ENV === 'development' || process.env.SEED_ADMIN === 'true') {
+      await seedDatabase()
     }
     
     app.listen(port, () => {
