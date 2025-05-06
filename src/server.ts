@@ -1,7 +1,7 @@
 import express from 'express';
 import cors, {CorsOptions} from 'cors';
 import { syncDatabase } from './models/index.js';
-import { seedDatabase } from 'seed.js';
+import { seedDatabase } from './seed.js';
 import authRoutes from './routes/auth.js';
 import dotenv from 'dotenv';
 
