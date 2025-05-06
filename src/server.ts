@@ -1,6 +1,7 @@
 import express from 'express';
 import cors, {CorsOptions} from 'cors';
 import { syncDatabase } from './models/index.js';
+import { seedDatabase } from './seed.js';
 import authRoutes from './routes/auth.js';
 import dotenv from 'dotenv';
 
@@ -36,18 +37,20 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
 // CORS configuration
 const corsOptions: CorsOptions = {
   origin: (origin, callback) =>{ // Allow your frontend URL
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, origin);
-    }
-    else {
-      console.error(`CORS error: ${origin} not allowed`);
-      callback(new Error('Not allowed by CORS'));
-    }
+  // Allow requests from tools or browsers that omit origin (like curl or mobile apps)
+  if (!origin) return callback(null, true);
+
+  if (allowedOrigins.includes(origin)) {
+    return callback(null, true);
+  } else {
+    console.error(`CORS error: ${origin} not allowed`);
+    return callback(new Error('Not allowed by CORS'));
+  }
   },
   // origin: '*', // Allow all origins for development
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS','PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true, // Allow cookies and authentication headers
+  // methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS','PATCH'],
+  // allowedHeaders: ['Content-Type', 'Authorization'],
+  // credentials: true, // Allow cookies and authentication headers
 };
 
 // Middleware
@@ -66,9 +69,9 @@ app.get('/health', (req, res) => {
 // Start server
 const startServer = async () => {
   try {
-    if (NODE_ENV === 'development') {
-      console.log('Syncing database in development mode...');
-      await syncDatabase();
+    await syncDatabase();
+    if (NODE_ENV === 'development' || process.env.SEED_ADMIN === 'true') {
+      await seedDatabase()
     }
     
     app.listen(port, () => {
