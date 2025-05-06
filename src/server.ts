@@ -4,6 +4,7 @@ import { syncDatabase } from './models/index.js';
 import { seedDatabase } from './seed.js';
 import authRoutes from './routes/auth.js';
 import dotenv from 'dotenv';
+import v1Routes from './routes/v1/index.js';
 
 // Load environment variables
 dotenv.config();
@@ -60,10 +61,17 @@ app.use(requestLogger); // Add request logging middleware
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/auth', v1Routes);
 
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
+});
+
+// Error handling middleware
+app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Something broke!' });
 });
 
 // Start server

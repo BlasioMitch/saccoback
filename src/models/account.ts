@@ -72,8 +72,4 @@ Account.init(
   }
 );
 
-// Define associations
-Account.belongsTo(User, { foreignKey: 'userId' });
-User.hasMany(Account, { foreignKey: 'userId' });
-
 export default Account;

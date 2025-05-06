@@ -1,7 +1,6 @@
 import { Model, DataTypes } from 'sequelize';
 import { BaseModel, baseAttributes } from './base.js';
 import sequelize from '../lib/sequelize.js';
-import Loan from './loan.js';
 
 interface LoanSummaryAttributes {
   loanId: string;
@@ -24,7 +23,7 @@ LoanSummary.init(
       type: DataTypes.UUID,
       primaryKey: true,
       references: {
-        model: Loan,
+        model: 'loans',
         key: 'id',
       },
     },
@@ -47,9 +46,5 @@ LoanSummary.init(
     tableName: 'loan_summaries',
   }
 );
-
-// Associations
-LoanSummary.belongsTo(Loan, { foreignKey: 'loanId', as: 'loan' });
-Loan.hasOne(LoanSummary, { foreignKey: 'loanId', as: 'summary' });
 
 export default LoanSummary; 

@@ -1,0 +1,193 @@
+import { Router, Request, Response } from 'express';
+import { models } from '../../models/index.js';
+import { generateUniqueAccountNumber } from '../../lib/utils.js';
+
+const router = Router();
+
+// Get all accounts
+router.get('/', async (req, res) => {
+  try {
+    const token = req.headers['authorization']?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+    const accounts = await models.Account.findAll({
+      include: [
+        {
+          model: models.User,
+          as: 'owner',
+          attributes: ['id', 'first_name', 'last_name', 'other_name'],
+        },
+      ],
+    });
+    return res.status(200).json(accounts);
+  } catch (error) {
+    console.error('Get account error:', error);
+    if (error instanceof Error && error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    if (error instanceof Error && error.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Token expired' });
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Create account
+router.post('/', async (req, res) => {
+  try {
+    const token = req.headers['authorization']?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+    const { userId, balance, status, paidMembership } = req.body;
+    
+    // Validate input
+    if (!userId || !balance || !status) {
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    // Check if user exists
+    const user = await models.User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Check if user already has an account
+    if (user.hasAccount) {
+      return res.status(409).json({ error: 'User already has an account' });
+    }
+
+    const accountNumber = await generateUniqueAccountNumber(user.first_name, user.last_name);
+
+    // Create new account
+    const newAccount = await models.Account.create({
+      userId,
+      accountNumber,
+      balance,
+      status,
+      paidMembership
+    });
+
+    // Update user hasAccount status
+    await models.User.update(
+      { hasAccount: true },
+      { where: { id: userId } }
+    );
+
+    // Return created account with user details
+    const fullAccount = await models.Account.findByPk(newAccount.id, {
+      include: [
+        {
+          model: models.User,
+          as: 'owner',
+          attributes: ['id', 'first_name', 'last_name', 'other_name'],
+        },
+      ],
+    });
+    res.status(201).json(fullAccount);
+  } catch (error) {
+    console.error('Create account error:', error);
+    if (error instanceof Error) {
+      if (error.name === 'SequelizeValidationError') {
+        const validationError = error as any;
+        return res.status(400).json({ error: 'Validation error', details: validationError.errors });
+      }
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        return res.status(409).json({ error: 'Account number already exists' });
+      }
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update account
+router.patch('/:id', async (req, res) => {
+  try {
+    const token = req.headers['authorization']?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+    const { id } = req.params;
+    const { balance, status, paidMembership } = req.body;
+
+    // Find account by ID
+    const account = await models.Account.findByPk(id);
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    // Update account
+    await account.update({
+      balance,
+      status,
+      paidMembership
+    });
+
+    // Return updated account
+    const updatedAccount = await models.Account.findByPk(id, {
+      include: [
+        {
+          model: models.User,
+          as: 'owner',
+          attributes: ['id', 'first_name', 'last_name', 'other_name'],
+        },
+      ],
+    });
+    res.status(200).json(updatedAccount);
+  } catch (error) {
+    console.error('Update account error:', error);
+    if (error instanceof Error && error.name === 'SequelizeValidationError') {
+      const validationError = error as any;
+      return res.status(400).json({ error: 'Validation error', details: validationError.errors });
+    }
+    if (error instanceof Error && error.name === 'SequelizeDatabaseError') {
+      return res.status(400).json({ error: 'Database error' });
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Delete account
+router.delete('/:id', async (req, res) => {
+  try {
+    const token = req.headers['authorization']?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+    const { id } = req.params;
+    
+    // Validate input
+    if (!id) {
+      return res.status(400).json({ error: 'Account ID is required' });
+    }
+
+    // Find account by ID
+    const account = await models.Account.findByPk(id);
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+
+    // Delete account
+    await account.destroy();
+
+    // Update user hasAccount status
+    await models.User.update(
+      { hasAccount: false },
+      { where: { id: account.userId } }
+    );
+
+    res.status(200).json({ message: 'Account deleted successfully' });
+  } catch (error) {
+    console.error('Delete account error:', error);
+    if (error instanceof Error && error.name === 'SequelizeForeignKeyConstraintError') {
+      return res.status(400).json({ error: 'Cannot delete account with existing dependencies' });
+    }
+    if (error instanceof Error && error.name === 'SequelizeDatabaseError') {
+      return res.status(400).json({ error: 'Database error' });
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+export default router; 

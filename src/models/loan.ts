@@ -74,9 +74,4 @@ Loan.init(
   }
 );
 
-// Define associations
-Loan.belongsTo(Account, { foreignKey: 'accountId', as: 'loanAccount' });
-Account.hasMany(Loan, { foreignKey: 'accountId', as: 'accountLoans' });
-Loan.hasOne(LoanSummary, { foreignKey: 'loanId', as: 'summary' });
-
 export default Loan;

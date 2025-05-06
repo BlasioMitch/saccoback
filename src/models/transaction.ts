@@ -82,11 +82,4 @@ Transaction.init(
   }
 );
 
-// Define associations
-Transaction.belongsTo(Account, { foreignKey: 'accountId' });
-Account.hasMany(Transaction, { foreignKey: 'accountId' });
-
-Loan.hasMany(Transaction, { foreignKey: 'loanId' });
-Transaction.belongsTo(Loan, { foreignKey: 'loanId' });
-
 export default Transaction; 
