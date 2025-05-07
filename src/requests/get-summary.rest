@@ -1,0 +1,2 @@
+GET http://localhost:3001/api/auth/loans/summary/8a1fdcdd-8365-4c1a-8d78-738e278d9b9b   
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIzOTA1ZGQwZC0xNWZkLTRmNDMtYjYxYi0zMjllOGVjMDIzZWYiLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzQ1NDEwNjExLCJleHAiOjE3NDU0OTcwMTF9.6oLGJ7I3TAXUCh9Wh3M_hY8a-UpgRIXeo1ZnGoiWjpw

@@ -7,16 +7,19 @@ import Loan from './loan.js';
 import LoanSummary from './loanSummary.js';
 import { defineAssociations } from './associations.js';
 
-// Define associations
-defineAssociations();
-
-export const models = {
+// Initialize models
+const models = {
     User,
     Account,
     Transaction,
     Loan,
     LoanSummary,
 };
+
+// Define associations
+defineAssociations();
+
+export { models };
 
 export const syncDatabase = async () => {
     try {

@@ -5,9 +5,9 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIzOTA1Z
 
 {
     "accountId": "bc71bc99-a0a1-4146-87f4-50d791a0035f",
-    "amount": 2000000,
-    "interestRate": 7,
-    "term": 12,
+    "amount": 5000000,
+    "interestRate": 10,
+    "term": 7,
     "status": "ACTIVE",
     "monthlyPayment": 20000,
     "totalInterest": 10000,

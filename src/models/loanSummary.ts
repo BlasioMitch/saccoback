@@ -1,6 +1,7 @@
 import { Model, DataTypes } from 'sequelize';
 import { BaseModel, baseAttributes } from './base.js';
 import sequelize from '../lib/sequelize.js';
+import Loan from './loan.js';
 
 interface LoanSummaryAttributes {
   loanId: string;
@@ -21,9 +22,9 @@ LoanSummary.init(
     ...baseAttributes,
     loanId: {
       type: DataTypes.UUID,
-      primaryKey: true,
+      allowNull: false,
       references: {
-        model: 'loans',
+        model: Loan,
         key: 'id',
       },
     },

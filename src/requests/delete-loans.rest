@@ -1,2 +1,2 @@
-DELETE http://localhost:3001/api/auth/loans/c6e79e34-526a-4d1a-a440-211ba8161969
+DELETE http://localhost:3001/api/auth/loans/a033e89c-fcc8-4f44-9cf4-5abc50ba82cb
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIzOTA1ZGQwZC0xNWZkLTRmNDMtYjYxYi0zMjllOGVjMDIzZWYiLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzQ1NDEwNjExLCJleHAiOjE3NDU0OTcwMTF9.6oLGJ7I3TAXUCh9Wh3M_hY8a-UpgRIXeo1ZnGoiWjpw

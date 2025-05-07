@@ -26,6 +26,12 @@ router.get('/', async (req, res) => {
             },
           ],
         },
+        {
+          model: models.LoanSummary,
+          as: 'summary',
+          required: false,
+          attributes: ['monthlyPayment', 'totalInterest', 'remainingBalance'],
+        },
       ],
     });
     return res.status(200).json(loans);
@@ -241,4 +247,18 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+router.get('/summary/:id', async (req, res) => {
+  const summary = await models.LoanSummary.findAll( {
+    where: {
+      loanId: req.params.id,
+    },
+    include: [
+      {
+        model: models.Loan,
+        as: 'loan',
+      },
+    ],
+  });
+  res.status(200).json(summary);
+});
 export default router; 

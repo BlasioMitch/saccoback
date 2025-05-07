@@ -18,6 +18,7 @@ interface LoanAttributes {
   status: LoanStatus;
   startDate: Date;
   endDate: Date;
+  summary?: LoanSummary;
 }
 
 class Loan extends BaseModel<LoanAttributes> implements LoanAttributes {
@@ -28,6 +29,7 @@ class Loan extends BaseModel<LoanAttributes> implements LoanAttributes {
   public status!: LoanStatus;
   public startDate!: Date;
   public endDate!: Date;
+  public summary?: LoanSummary;
 }
 
 Loan.init(
