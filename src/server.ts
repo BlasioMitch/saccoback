@@ -60,7 +60,7 @@ app.use(express.json());
 app.use(requestLogger); // Add request logging middleware
 
 // Routes
-app.use('/api/auth', authRoutes);
+// app.use('/api/auth', authRoutes);
 app.use('/api/auth', v1Routes);
 
 // Health check
