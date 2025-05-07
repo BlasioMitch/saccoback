@@ -8,7 +8,7 @@ import loanRoutes from './loan.routes.js';
 const router = Router();
 
 // Mount routes
-router.use('/auth', authRoutes);
+router.use('/login', authRoutes);
 router.use('/users', userRoutes);
 router.use('/accounts', accountRoutes);
 router.use('/transactions', transactionRoutes);

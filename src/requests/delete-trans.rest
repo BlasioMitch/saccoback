@@ -1,2 +1,2 @@
-DELETE http://localhost:3001/api/auth/transactions/38630626-0aac-45f9-936b-868b640762bb
+DELETE http://localhost:3001/api/transactions/38630626-0aac-45f9-936b-868b640762bb
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIzOTA1ZGQwZC0xNWZkLTRmNDMtYjYxYi0zMjllOGVjMDIzZWYiLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzQ1NDEwNjExLCJleHAiOjE3NDU0OTcwMTF9.6oLGJ7I3TAXUCh9Wh3M_hY8a-UpgRIXeo1ZnGoiWjpw
