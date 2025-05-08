@@ -170,6 +170,31 @@ router.patch('/:id', async (req, res) => {
       endDate,
     });
 
+    // Update Loan Summary
+    const loanSummary = await models.LoanSummary.findOne({
+      where: { loanId: id },
+    });
+    if (loanSummary) {
+      const monthlyPayment = calculateMonthlyPayment(amount, interestRate, term);
+      const totalInterest = calculateTotalInterest(amount, interestRate, term);
+      const remainingBalance = calculateRemainingBalance(amount, 0);
+      await loanSummary.update({
+        monthlyPayment,
+        totalInterest,
+        remainingBalance,
+      });
+    } else {
+      const monthlyPayment = calculateMonthlyPayment(amount, interestRate, term);
+      const totalInterest = calculateTotalInterest(amount, interestRate, term);
+      const remainingBalance = calculateRemainingBalance(amount, 0);
+      await models.LoanSummary.create({
+        loanId: id,
+        monthlyPayment,
+        totalInterest,
+        remainingBalance,
+      });
+    }
+
     // Return updated loan
     const updatedLoan = await models.Loan.findByPk(id, {
       include: [
@@ -231,6 +256,10 @@ router.delete('/:id', async (req, res) => {
       { hasLoan: false },
       { where: { id: loan.accountId } }
     );
+    // Delete loan summary
+    await models.LoanSummary.destroy({
+      where: { loanId: id },
+    });
 
     // Delete loan
     await loan.destroy();
@@ -247,11 +276,8 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-router.get('/summary/:id', async (req, res) => {
+router.get('/summary/', async (req, res) => {
   const summary = await models.LoanSummary.findAll( {
-    where: {
-      loanId: req.params.id,
-    },
     include: [
       {
         model: models.Loan,

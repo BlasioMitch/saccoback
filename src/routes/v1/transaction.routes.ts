@@ -78,7 +78,8 @@ router.post('/', async (req, res) => {
 
     // Update the loan summary for loan payments
     if (type === 'LOAN_PAYMENT' && loanId) {
-      const loanSummary = await models.LoanSummary.findByPk(loanId);
+      const loanSummary = await models.LoanSummary.findOne({
+        where: {loanId:loanId}});
       if (!loanSummary) {
         return res.status(404).json({ error: 'Loan summary not found' });
       }
@@ -102,7 +103,7 @@ router.post('/', async (req, res) => {
           );
         }
       }
-    } else if (type === 'MEMBERSHIP_FEE' || 
+    } else if (
                type === 'ACCOUNT_WITHDRAW' || 
                type === 'CLOSURE_WITHDRAW') {
       await account.update({
@@ -112,6 +113,12 @@ router.post('/', async (req, res) => {
       await account.update({
         balance: Number(account.balance) + Number(amount),
       });
+    } else if (type === 'MEMBERSHIP_FEE' ){
+      await account.update({
+        balance: Number(account.balance) - Number(amount),
+        paidMembership: true,
+      });
+
     }
 
     // Return created transaction

@@ -3,8 +3,8 @@ Content-Type: application/json
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIzOTA1ZGQwZC0xNWZkLTRmNDMtYjYxYi0zMjllOGVjMDIzZWYiLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzQ1NDEwNjExLCJleHAiOjE3NDU0OTcwMTF9.6oLGJ7I3TAXUCh9Wh3M_hY8a-UpgRIXeo1ZnGoiWjpw
 
 {
-    "accountId": "bc71bc99-a0a1-4146-87f4-50d791a0035f",
-    "amount": 600000,
-    "type": "SAVINGS_DEPOSIT",
+    "accountId": "92d78186-0c56-422b-bf1d-a359264188fa",
+    "amount": 220000,
+    "type": "ACCOUNT_WITHDRAW",
     "status": "COMPLETED"
 }
