@@ -1,6 +1,9 @@
 import { Router, Request, Response } from 'express';
+import sequelize from 'sequelize';
 import bcrypt from 'bcryptjs';
 import { models } from '../../models/index.js';
+import Transaction from '../../models/transaction.js';
+
 
 const router = Router();
 
@@ -30,6 +33,72 @@ router.get('/', async (req, res) => {
           hasAccount: user.hasAccount,
         })))
       : res.status(404).json({ error: 'No users found' });
+  } catch (error) {
+    console.error('Get user error:', error);
+    if (error instanceof Error && error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    if (error instanceof Error && error.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Token expired' });
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get one user profile
+router.get('/:id', async (req, res) => {
+  try {
+    const token = req.headers['authorization']?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+    const user = await models.User.findByPk(id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Fetch account details
+    const account = await models.Account.findOne({
+      where: { userId: id },
+    });
+    // Fetch all loans for the user
+    const loans = await models.Loan.findAll({
+      where: { accountId: account?.id },
+      include: [
+        {
+          model: models.LoanSummary,
+          as: 'summary',
+          required: false,
+          attributes: ['monthlyPayment', 'totalInterest', 'remainingBalance'],
+        },
+      ],
+    });
+    const transactions = await Transaction.findAll({
+      // attributes: ['type', [sequelize.fn('COUNT', sequelize.col('id')), 'count']],
+      order: ['type'],
+      // raw: true, // To get plain JavaScript objects instead of Sequelize model instances
+    });
+
+    const groupedTransactions = transactions.reduce<Record<string, any[]>>((acc, transaction) => {
+      const type = transaction.type as string;
+      if (!acc[type]) {
+        acc[type] = [];
+      }
+      acc[type].push(transaction.get({ plain: true })); // Use .get({ plain: true }) for cleaner objects
+      return acc;
+    }, {});
+
+    return res.status(200).json({
+      user: user,
+      account,
+      loans,
+      transactions: groupedTransactions,
+    });
+
   } catch (error) {
     console.error('Get user error:', error);
     if (error instanceof Error && error.name === 'JsonWebTokenError') {
