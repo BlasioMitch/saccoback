@@ -87,7 +87,7 @@ router.post('/', async (req, res) => {
     // Calculate Loan Summary
     const monthlyPayment = calculateMonthlyPayment(amount, interestRate, term);
     const totalInterest = calculateTotalInterest(amount, interestRate, term);
-    const remainingBalance = calculateRemainingBalance(amount, 0);
+    const remainingBalance = calculateRemainingBalance(amount*(1+interestRate/100), 0);
 
     await models.LoanSummary.create({
       loanId: newLoan.id,
@@ -186,7 +186,7 @@ router.patch('/:id', async (req, res) => {
     } else {
       const monthlyPayment = calculateMonthlyPayment(amount, interestRate, term);
       const totalInterest = calculateTotalInterest(amount, interestRate, term);
-      const remainingBalance = calculateRemainingBalance(amount, 0);
+      const remainingBalance = calculateRemainingBalance(amount*(1+interestRate/100), 0);
       await models.LoanSummary.create({
         loanId: id,
         monthlyPayment,
