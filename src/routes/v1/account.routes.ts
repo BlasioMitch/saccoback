@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { models } from '../../models/index.js';
 import { generateUniqueAccountNumber } from '../../lib/utils.js';
+import { TransactionStatus, TransactionType } from 'models/transaction.js';
 
 const router = Router();
 
@@ -74,7 +75,27 @@ router.post('/', async (req, res) => {
       { hasAccount: true },
       { where: { id: userId } }
     );
+    // create transaction if paidMemebership is true
+    if (paidMembership) {
+      await models.Transaction.create({
+        accountId: newAccount.id,
+        accountName: newAccount.accountNumber,
+        type: TransactionType.MEMBERSHIP_FEE ,
+        amount: 20000,
+        status: TransactionStatus.COMPLETED
+      });
+    }
 
+    // create transaction if balance > 0
+    if (balance > 0) {
+      await models.Transaction.create({
+        accountId: newAccount.id,
+        accountName: newAccount.accountNumber,
+        type: TransactionType.SAVINGS_DEPOSIT,
+        amount: balance,
+        status: TransactionStatus.COMPLETED
+      });
+    }
     // Return created account with user details
     const fullAccount = await models.Account.findByPk(newAccount.id, {
       include: [
