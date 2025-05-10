@@ -1,8 +1,6 @@
 import { Router, Request, Response } from 'express';
-import sequelize from 'sequelize';
 import bcrypt from 'bcryptjs';
 import { models } from '../../models/index.js';
-import Transaction from '../../models/transaction.js';
 
 
 const router = Router();
@@ -12,7 +10,7 @@ router.get('/', async (req, res) => {
   try {
     const token = req.headers['authorization']?.split(' ')[1];
     if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
+      return res.status(401).json({ error: 'No token provided'});
     }
     const users = await models.User.findAll();
     return users
@@ -60,16 +58,21 @@ router.get('/:id', async (req, res) => {
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-
+    console.log('User found')
+    
     // Fetch account details
-    let account = await models.Account.findOne({
+    const account = await models.Account.findOne({
       where: { userId: id },
     });
-    // if account is not found, set it to null
     if (!account) {
-       account = null;
+      return res.status(200).json({
+        user: user,
+        account:null,
+        loans:[],
+        transactions:[],
+      });
+  
     }
-    // Fetch all loans for the user
     let loans = await models.Loan.findAll({
       where: { accountId: account?.id },
       include: [
@@ -85,7 +88,7 @@ router.get('/:id', async (req, res) => {
     if (!loans) {
       loans = [];
     }
-    const transactions = await Transaction.findAll({
+    const transactions = await models.Transaction.findAll({
       // where: { accountId: account?.id },
       where: {
         accountId: account?.id,

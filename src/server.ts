@@ -21,9 +21,9 @@ const requestLogger = (req: express.Request, res: express.Response, next: expres
   
   console.log(`
 [${timestamp}] ${method} ${url}
-Body: ${body}
 ----------------------------------------
-  `);
+`);
+// Body: ${body}
   
   next();
 };

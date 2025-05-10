@@ -75,17 +75,20 @@ router.post('/login', async (req, res) => {
 
 // Logout
 router.post('/logout', (req: SessionRequest, res: Response) => {
-  if (!req.session) {
-    return res.status(400).json({ error: 'Session not found' });
-  }
-  req.session.destroy((err: Error | null) => {
-    if (err) {
-      console.error('Logout error:', err);
-      return res.status(500).json({ error: 'Internal server error, Logout failed' });
-    }
-    res.clearCookie('token');
-    res.json({ message: 'Logged out successfully' });
-  });
+//  TODO: Implement session management
+  // if (!req.session) {
+  //   return res.status(400).json({ error: 'Session not found' });
+  // }
+  // req.session.destroy((err: Error | null) => {
+  //   if (err) {
+  //     console.error('Logout error:', err);
+  //     return res.status(500).json({ error: 'Internal server error, Logout failed' });
+  //   }
+  //   res.clearCookie('token');
+  //   res.json({ message: 'Logged out successfully' });
+  // });
+  // For now, just clear the JWT token from the client side
+  res.json({ message: 'Logged out successfully (client should remove JWT)' });
 });
 
 export default router; 

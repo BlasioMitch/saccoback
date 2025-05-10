@@ -1,4 +1,4 @@
-GET http://localhost:3001/api/users/7698d611-ab4e-4845-99b1-8891f450edaa
+GET http://localhost:3001/api/users/042514af-14a6-4bc4-a73d-7fef07738c65
 Content-Type: application/json
 Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIzOTA1ZGQwZC0xNWZkLTRmNDMtYjYxYi0zMjllOGVjMDIzZWYiLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzQ1NDEwNjExLCJleHAiOjE3NDU0OTcwMTF9.6oLGJ7I3TAXUCh9Wh3M_hY8a-UpgRIXeo1ZnGoiWjpw
 
