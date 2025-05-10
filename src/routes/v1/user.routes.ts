@@ -62,11 +62,15 @@ router.get('/:id', async (req, res) => {
     }
 
     // Fetch account details
-    const account = await models.Account.findOne({
+    let account = await models.Account.findOne({
       where: { userId: id },
     });
+    // if account is not found, set it to null
+    if (!account) {
+       account = null;
+    }
     // Fetch all loans for the user
-    const loans = await models.Loan.findAll({
+    let loans = await models.Loan.findAll({
       where: { accountId: account?.id },
       include: [
         {
@@ -77,7 +81,15 @@ router.get('/:id', async (req, res) => {
         },
       ],
     });
+    // If no loans return save empty list
+    if (!loans) {
+      loans = [];
+    }
     const transactions = await Transaction.findAll({
+      // where: { accountId: account?.id },
+      where: {
+        accountId: account?.id,
+      },
       // attributes: ['type', [sequelize.fn('COUNT', sequelize.col('id')), 'count']],
       order: ['type'],
       // raw: true, // To get plain JavaScript objects instead of Sequelize model instances
