@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { models } from '../../models/index.js';
 import { generateUniqueAccountNumber } from '../../lib/utils.js';
-import { TransactionStatus, TransactionType } from 'models/transaction.js';
+import { TransactionStatus, TransactionType } from '../../models/transaction.js';
 
 const router = Router();
 
