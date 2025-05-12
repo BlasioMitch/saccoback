@@ -4,6 +4,7 @@ import { syncDatabase } from './models/index.js';
 import { seedDatabase } from './seed.js';
 import dotenv from 'dotenv';
 import v1Routes from './routes/v1/index.js';
+import { authenticateToken } from './lib/authenticateToken.js';
 
 // Load environment variables
 dotenv.config();
@@ -57,6 +58,7 @@ const corsOptions: CorsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(requestLogger); // Add request logging middleware
+app.use(authenticateToken); // Add authentication middleware globally
 
 // Routes
 app.use('/api', v1Routes);
@@ -95,4 +97,4 @@ Time: ${new Date().toISOString()}
   }
 };
 
-startServer(); 
+startServer();
