@@ -5,6 +5,7 @@ import { seedDatabase } from './seed.js';
 import dotenv from 'dotenv';
 import v1Routes from './routes/v1/index.js';
 import { authenticateToken } from './lib/authenticateToken.js';
+import cookieParser from 'cookie-parser';
 
 // Load environment variables
 dotenv.config();
@@ -49,15 +50,16 @@ const corsOptions: CorsOptions = {
   }
   },
   // origin: '*', // Allow all origins for development
-  // methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS','PATCH'],
-  // allowedHeaders: ['Content-Type', 'Authorization'],
-  // credentials: true, // Allow cookies and authentication headers
+  methods: ['GET', 'POST', 'PUT', 'DELETE','PATCH'],
+  allowedHeaders: ['Content-Type'],
+  credentials: true, // Allow cookies and authentication headers
 };
 
 // Middleware
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(requestLogger); // Add request logging middleware
+app.use(cookieParser()); // Parse cookies
 app.use(authenticateToken); // Add authentication middleware globally
 
 // Routes

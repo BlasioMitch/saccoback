@@ -8,10 +8,6 @@ const router = Router();
 // Get all loans
 router.get('/', async (req, res) => {
   try {
-    const token = req.headers['authorization']?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
     const loans = await models.Loan.findAll({
       include: [
         {
@@ -37,12 +33,6 @@ router.get('/', async (req, res) => {
     return res.status(200).json(loans);
   } catch (error) {
     console.error('Get loan error:', error);
-    if (error instanceof Error && error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-    if (error instanceof Error && error.name === 'TokenExpiredError') {
-      return res.status(401).json({ error: 'Token expired' });
-    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -50,12 +40,8 @@ router.get('/', async (req, res) => {
 // Create loan
 router.post('/', async (req, res) => {
   try {
-    const token = req.headers['authorization']?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
     const { accountId, amount, interestRate, term, status, startDate, endDate } = req.body;
-    
+
     // Validate input
     if (!accountId || !amount || !interestRate || !term || !status || !startDate || !endDate) {
       return res.status(400).json({ error: 'All fields are required' });
@@ -138,10 +124,6 @@ router.post('/', async (req, res) => {
 // Update loan
 router.patch('/:id', async (req, res) => {
   try {
-    const token = req.headers['authorization']?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
     const { id } = req.params;
     const { accountId, amount, interestRate, term, status, startDate, endDate } = req.body;
 
@@ -234,10 +216,6 @@ router.patch('/:id', async (req, res) => {
 // Delete loan
 router.delete('/:id', async (req, res) => {
   try {
-    const token = req.headers['authorization']?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
     const { id } = req.params;
     
     // Validate input
@@ -287,4 +265,4 @@ router.get('/summary/', async (req, res) => {
   });
   res.status(200).json(summary);
 });
-export default router; 
+export default router;

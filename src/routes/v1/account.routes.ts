@@ -8,10 +8,6 @@ const router = Router();
 // Get all accounts
 router.get('/', async (req, res) => {
   try {
-    const token = req.headers['authorization']?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
     const accounts = await models.Account.findAll({
       include: [
         {
@@ -24,12 +20,6 @@ router.get('/', async (req, res) => {
     return res.status(200).json(accounts);
   } catch (error) {
     console.error('Get account error:', error);
-    if (error instanceof Error && error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-    if (error instanceof Error && error.name === 'TokenExpiredError') {
-      return res.status(401).json({ error: 'Token expired' });
-    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -37,10 +27,6 @@ router.get('/', async (req, res) => {
 // Create account
 router.post('/', async (req, res) => {
   try {
-    const token = req.headers['authorization']?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
     const { userId, balance, status, paidMembership } = req.body;
     
     // Validate input
@@ -125,10 +111,6 @@ router.post('/', async (req, res) => {
 // Update account
 router.patch('/:id', async (req, res) => {
   try {
-    const token = req.headers['authorization']?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
     const { id } = req.params;
     const { balance, status, paidMembership } = req.body;
 
@@ -172,10 +154,6 @@ router.patch('/:id', async (req, res) => {
 // Delete account
 router.delete('/:id', async (req, res) => {
   try {
-    const token = req.headers['authorization']?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
     const { id } = req.params;
     
     // Validate input
@@ -211,4 +189,4 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-export default router; 
+export default router;

@@ -8,10 +8,6 @@ const router = Router();
 // Get all transactions
 router.get('/', async (req, res) => {
   try {
-    const token = req.headers['authorization']?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
     const transactions = await models.Transaction.findAll({
       include: [
         {
@@ -31,12 +27,6 @@ router.get('/', async (req, res) => {
     return res.status(200).json(transactions);
   } catch (error) {
     console.error('Get transaction error:', error);
-    if (error instanceof Error && error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ error: 'Invalid token' });
-    }
-    if (error instanceof Error && error.name === 'TokenExpiredError') {
-      return res.status(401).json({ error: 'Token expired' });
-    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -44,12 +34,8 @@ router.get('/', async (req, res) => {
 // Create transaction
 router.post('/', async (req, res) => {
   try {
-    const token = req.headers['authorization']?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
     const { accountId, type, amount, status, loanId } = req.body;
-    
+
     // Validate input
     if (!accountId || !type || !amount || !status) {
       return res.status(400).json({ error: 'All fields are required' });
@@ -141,10 +127,6 @@ router.post('/', async (req, res) => {
 // Update transaction
 router.patch('/:id', async (req, res) => {
   try {
-    const token = req.headers['authorization']?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
     const { id } = req.params;
     const { accountId, type, amount, status, loanId } = req.body;
 
@@ -221,10 +203,6 @@ router.patch('/:id', async (req, res) => {
 // Delete transaction
 router.delete('/:id', async (req, res) => {
   try {
-    const token = req.headers['authorization']?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
     const { id } = req.params;
     
     // Validate input
@@ -253,4 +231,4 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-export default router; 
+export default router;

@@ -46,6 +46,13 @@ router.post('/login', async (req, res) => {
       JWT_SECRET,
       { expiresIn: '1d' }
     );
+    // set HTTP-only cookie
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production', // Set to true in production
+      sameSite: 'lax', // Prevent CSRF attacks
+      maxAge: 24 * 60 * 60 * 1000, // 1 day
+    });
 
     // Return user data and token
     res.json({
@@ -54,16 +61,9 @@ router.post('/login', async (req, res) => {
         firstName: user.first_name,
         lastName: user.last_name,
         otherName: user.other_name,
-        fullName: user.getFullName(),
-        fullNameWithOtherName: user.getFullName(),
         email: user.email,
         role: user.role,
-        status: user.status,
-        contact: user.contact,
         gender: user.gender,
-        dob: user.dob,
-        joinDate: user.joinDate,
-        lastLogin: user.lastLogin
       },
       token,
     });
