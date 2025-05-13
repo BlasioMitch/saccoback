@@ -19,7 +19,6 @@ router.get('/', async (req, res) => {
     });
     return res.status(200).json(accounts);
   } catch (error) {
-    console.error('Get account error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -94,7 +93,6 @@ router.post('/', async (req, res) => {
     });
     res.status(201).json(fullAccount);
   } catch (error) {
-    console.error('Create account error:', error);
     if (error instanceof Error) {
       if (error.name === 'SequelizeValidationError') {
         const validationError = error as any;
@@ -139,7 +137,6 @@ router.patch('/:id', async (req, res) => {
     });
     res.status(200).json(updatedAccount);
   } catch (error) {
-    console.error('Update account error:', error);
     if (error instanceof Error && error.name === 'SequelizeValidationError') {
       const validationError = error as any;
       return res.status(400).json({ error: 'Validation error', details: validationError.errors });
@@ -178,7 +175,6 @@ router.delete('/:id', async (req, res) => {
 
     res.status(200).json({ message: 'Account deleted successfully' });
   } catch (error) {
-    console.error('Delete account error:', error);
     if (error instanceof Error && error.name === 'SequelizeForeignKeyConstraintError') {
       return res.status(400).json({ error: 'Cannot delete account with existing dependencies' });
     }

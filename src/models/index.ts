@@ -1,4 +1,3 @@
-import { Sequelize } from 'sequelize';
 import sequelize from '../lib/sequelize.js';
 import User from './user.js';
 import Account from './account.js';
@@ -19,17 +18,15 @@ const models = {
 // Define associations
 defineAssociations();
 
-export { models };
+export { models, sequelize };
 
 export const syncDatabase = async () => {
     try {
         // Alter: true will modify existing tables without dropping them
         await sequelize.sync({ alter: true });
         console.log('Database synchronized successfully');
-    } catch (error) {
+    } catch (error) {   
         console.error('Error synchronizing database:', error);
         throw error;
     }
 };
-
-export default sequelize;
