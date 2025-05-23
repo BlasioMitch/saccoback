@@ -33,6 +33,8 @@ interface UserAttributes {
   gender: Gender;
   dob: Date;
   hasAccount?: boolean;
+  is_deleted?: boolean;
+  deleted_at?: Date;
 }
 
 class User extends BaseModel<UserAttributes> implements UserAttributes {
@@ -49,7 +51,9 @@ class User extends BaseModel<UserAttributes> implements UserAttributes {
   public first_name!: string;
   public last_name!: string;
   public other_name!: string;
-  hasAccount?: boolean ;
+  public hasAccount?: boolean ;
+  public is_deleted?: boolean;
+  public deleted_at?: Date | undefined;
   public getFullName(): string {
     return this.other_name 
       ? `${this.first_name} ${this.other_name} ${this.last_name}`
@@ -117,6 +121,16 @@ User.init(
       allowNull: true,
       defaultValue: false, 
     },
+    is_deleted: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: false, 
+    },
+    deleted_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: null,
+    }
   },
   {
     sequelize,

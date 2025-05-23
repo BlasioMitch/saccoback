@@ -18,6 +18,8 @@ interface AccountAttributes {
   status: AccountStatus;
   paidMembership: boolean;
   hasLoan?: boolean
+  is_deleted?: boolean;
+  deleted_at?: Date;
 }
 
 class Account extends BaseModel<AccountAttributes> implements AccountAttributes {
@@ -27,6 +29,8 @@ class Account extends BaseModel<AccountAttributes> implements AccountAttributes 
   public status!: AccountStatus;
   public paidMembership!: boolean;
   public hasLoan!: boolean;
+  public is_deleted?: boolean;
+  public deleted_at?: Date | undefined;
 }
 
 Account.init(
@@ -63,6 +67,16 @@ Account.init(
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false,
+    },
+    is_deleted: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: false,
+    },
+    deleted_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: null,
     },
   },
   {

@@ -1,13 +1,15 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { models } from '../../models/index.js';
+import  { AccountStatus } from '../../models/account.js';
+import { sendAccountCreationEmail } from '../../lib/mailer.js';
 
 const router = Router();
 
 // Get all users
 router.get('/', async (req, res) => {
   try {
-    const users = await models.User.findAll();
+    const users = await models.User.findAll({where: {is_deleted: false}});
     return users
       ? res.status(200).json(users.map(user => ({
           id: user.id,
@@ -40,7 +42,7 @@ router.get('/:id', async (req, res) => {
       return res.status(400).json({ error: 'User ID is required' });
     }
     const user = await models.User.findByPk(id);
-    if (!user) {
+    if (!user || user.is_deleted) {
       return res.status(404).json({ error: 'User not found' });
     }
     
@@ -129,6 +131,18 @@ router.post('/', async (req, res) => {
       joinDate: new Date(),
     });
 
+    // Send welcome email
+    try {
+      await sendAccountCreationEmail({
+        email: 'blaminsi@gmail.com',
+        name: newUser.getFullName(),
+        accountId: newUser.id
+      });
+    } catch (emailError) {
+      console.error('Error sending welcome email:', emailError);
+      // Don't fail the request if email fails
+    }
+
     res.status(201).json({
       id: newUser.id,
       first_name: newUser.first_name,
@@ -201,8 +215,20 @@ router.delete('/:id', async (req, res) => {
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-
-    await user.destroy();
+    // this is a hard delete
+    // await user.destroy();
+    // Delete softly
+    await user.update({
+      is_deleted: true,
+      deleted_at: new Date(),
+    });
+    // soft Delete  account associated with the user
+    const account = await models.Account.findOne({ where: { userId: id } });
+    await account?.update({
+      is_deleted: true,
+      status: AccountStatus.CLOSED,
+      deleted_at: new Date(),
+    });
     res.status(200).json({ message: 'User deleted successfully' });
   } catch (error) {
     console.error('Delete user error:', error);

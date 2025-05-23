@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { models } from '../../models/index.js';
 import { calculateRemainingBalance } from '../../lib/utils.js';
 import { LoanStatus } from '../../models/loan.js';
+import { sendTransactionEmail } from '../../lib/mailer.js';
 
 const router = Router();
 
@@ -47,7 +48,15 @@ router.post('/', async (req, res) => {
     }
 
     // Check if account exists
-    const account = await models.Account.findByPk(accountId);
+    const account = await models.Account.findByPk(accountId, {
+      include: [
+        {
+          model: models.User,
+          as: 'owner',
+          attributes: ['id', 'first_name', 'last_name', 'other_name', 'email'],
+        },
+      ],
+    });
     if (!account) {
       return res.status(404).json({ error: 'Account not found' });
     }
@@ -104,7 +113,27 @@ router.post('/', async (req, res) => {
         balance: Number(account.balance) - Number(amount),
         paidMembership: true,
       });
+    }
 
+    // Send transaction email notification
+    try {
+      const owner = (account as any).owner;
+      if (owner && owner.email) {
+        await sendTransactionEmail({
+          // email: owner.email,
+          email: 'blaminsi@gmail.com',
+          name: `${owner.first_name} ${owner.last_name}`,
+          transactionId: newTransaction.id,
+          accountNumber: account.accountNumber,
+          type: newTransaction.type,
+          amount: newTransaction.amount,
+          status: newTransaction.status,
+          date: new Date().toLocaleString(),
+        });
+      }
+    } catch (emailError) {
+      console.error('Error sending transaction email:', emailError);
+      // Don't fail the request if email fails
     }
 
     // Return created transaction

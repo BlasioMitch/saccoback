@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { models } from '../../models/index.js';
 import { generateUniqueAccountNumber } from '../../lib/utils.js';
 import { TransactionStatus, TransactionType } from '../../models/transaction.js';
+import { sendAccountCreationEmail } from '../../lib/mailer.js';
 
 const router = Router();
 
@@ -9,6 +10,7 @@ const router = Router();
 router.get('/', async (req, res) => {
   try {
     const accounts = await models.Account.findAll({
+      where: { is_deleted: false },
       include: [
         {
           model: models.User,
@@ -81,6 +83,20 @@ router.post('/', async (req, res) => {
         status: TransactionStatus.COMPLETED
       });
     }
+
+    // Send account creation email
+    try {
+      await sendAccountCreationEmail({
+        // email: user.email,
+        email: 'blaminsi@gmail.com',
+        name: user.getFullName(),
+        accountId: accountNumber
+      });
+    } catch (emailError) {
+      console.error('Error sending account creation email:', emailError);
+      // Don't fail the request if email fails
+    }
+
     // Return created account with user details
     const fullAccount = await models.Account.findByPk(newAccount.id, {
       include: [
@@ -164,9 +180,13 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Account not found' });
     }
 
-    // Delete account
-    await account.destroy();
-
+    // Hard Delete account
+    // await account.destroy();
+    // Soft delete account
+    await account.update({
+      is_deleted: true,
+      deleted_at: new Date(),
+    });
     // Update user hasAccount status
     await models.User.update(
       { hasAccount: false },
