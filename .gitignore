@@ -402,5 +402,5 @@ FodyWeavers.xsd
 # environment data
 .env
 
-# dis folder
+# dist folder
 dist/
