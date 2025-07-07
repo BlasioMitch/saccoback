@@ -6,6 +6,8 @@ import dotenv from 'dotenv';
 import v1Routes from './routes/v1/index.js';
 import { authenticateToken } from './lib/authenticateToken.js';
 import cookieParser from 'cookie-parser';
+import swaggerUi from 'swagger-ui-express';
+import { swaggerSpec } from './lib/swagger.js';
 
 // Load environment variables
 dotenv.config();
@@ -33,7 +35,8 @@ const requestLogger = (req: express.Request, res: express.Response, next: expres
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
   'http://localhost:3000',
   'http://localhost:3002',
-  'http://localhost:5173'
+  'http://localhost:5173',
+  'http://localhost:4000',
 ];
 
 // CORS configuration
@@ -69,6 +72,12 @@ app.use('/api', v1Routes);
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
+app.get('/debug/users', (req, res) => {
+  res.json({ status: 'alright', headers: req.headers });
+});
+
+// Swagger documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {

@@ -7,6 +7,7 @@ import { sendLoanCreationEmail, sendLoanCompletionEmail } from '../../lib/mailer
 const router = Router();
 
 // Get all loans
+// Get all loans /loans?accountId=1
 router.get('/', async (req, res) => {
   try {
     const loans = await models.Loan.findAll({
