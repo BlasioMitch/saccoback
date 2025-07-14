@@ -9,29 +9,16 @@ const router = Router();
 // Get all loans
 // Get all loans /loans?accountId=1
 router.get('/', async (req, res) => {
+  const { accountId } = req.query;
   try {
-    const loans = await models.Loan.findAll({
-      include: [
-        {
-          model: models.Account,
-          as: 'account',
-          attributes: ['id', 'accountNumber'],
-          include: [
-            {
-              model: models.User,
-              as: 'owner',
-              attributes: ['first_name', 'last_name', 'other_name'],
-            },
-          ],
-        },
-        {
-          model: models.LoanSummary,
-          as: 'summary',
-          required: false,
-          attributes: ['monthlyPayment', 'totalInterest', 'remainingBalance'],
-        },
-      ],
-    });
+  if (accountId) {
+      const loans = await models.Loan.findAll({
+        where: { accountId: accountId as string },
+      });
+      return res.status(200).json(loans);
+  }
+    const loans = await models.Loan.findAll();
+    
     return res.status(200).json(loans);
   } catch (error) {
     console.error('Get loan error:', error);
@@ -39,6 +26,28 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Get a lona summary
+router.get('/:id/summary', async (req, res) => {
+  const { id } = req.params;
+  try {
+    if (!id) {
+      return res.status(400).json({ error: 'Loan ID is required' });
+    }
+    const loanSummary = await models.LoanSummary.findOne({
+      where: { loanId: id as string },
+    });
+    if (!loanSummary) {
+      return res.status(404).json({ error: 'Loan summary not found' });
+    }
+    res.status(200).json(loanSummary);
+  } catch (error) {
+    console.error('Get loan summary error:', error);
+    if (error instanceof Error && error.name === 'SequelizeDatabaseError') {
+      return res.status(400).json({ error: 'Database error' });
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 // Create loan
 router.post('/', async (req, res) => {
   try {
@@ -269,27 +278,8 @@ router.patch('/:id', async (req, res) => {
     }
 
     // Return updated loan
-    const updatedLoan = await models.Loan.findByPk(id, {
-      include: [
-        {
-          model: models.Account,
-          as: 'account',
-          attributes: ['id', 'accountNumber'],
-          include: [
-            {
-              model: models.User,
-              as: 'owner',
-              attributes: ['first_name', 'last_name', 'other_name'],
-            },
-          ],
-        },
-        {
-          model: models.LoanSummary,
-          as: 'summary',
-          attributes: ['monthlyPayment', 'totalInterest', 'remainingBalance'],
-        },
-      ],
-    });
+    const updatedLoan = await models.Loan.findByPk(id);
+    
     res.status(200).json(updatedLoan);
   } catch (error) {
     console.error('Update loan error:', error);

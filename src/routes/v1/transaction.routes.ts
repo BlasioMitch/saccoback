@@ -8,23 +8,16 @@ const router = Router();
 
 // Get all transactions
 router.get('/', async (req, res) => {
+  const { accountId } = req.query;
   try {
+  if (accountId) {
     const transactions = await models.Transaction.findAll({
-      include: [
-        {
-          model: models.Account,
-          as: 'account',
-          attributes: ['id', 'accountNumber'],
-          include: [
-            {
-              model: models.User,
-              as: 'owner',
-              attributes: ['first_name', 'last_name', 'other_name'],
-            },
-          ],
-        },
-      ],
+      where: { accountId: accountId as string },
     });
+    return res.status(200).json(transactions);
+  }
+    const transactions = await models.Transaction.findAll();
+
     return res.status(200).json(transactions);
   } catch (error) {
     console.error('Get transaction error:', error);
@@ -48,15 +41,7 @@ router.post('/', async (req, res) => {
     }
 
     // Check if account exists
-    const account = await models.Account.findByPk(accountId, {
-      include: [
-        {
-          model: models.User,
-          as: 'owner',
-          attributes: ['id', 'first_name', 'last_name', 'other_name', 'email'],
-        },
-      ],
-    });
+    const account = await models.Account.findByPk(accountId);
     if (!account) {
       return res.status(404).json({ error: 'Account not found' });
     }

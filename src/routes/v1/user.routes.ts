@@ -8,7 +8,30 @@ const router = Router();
 
 // Get all users
 router.get('/', async (req, res) => {
+  const { userId } = req.query;
   try {
+  if (userId) {
+    const user = await models.User.findByPk(userId as string);
+    if (!user || user.is_deleted) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    return res.status(200).json({
+          id: user.id,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          other_name: user.other_name,
+          fullName: user.getFullName(),
+          email: user.email,
+          role: user.role,
+          status: user.status,
+          contact: user.contact,
+          gender: user.gender,
+          dob: user.dob,
+          joinDate: user.joinDate,
+          lastLogin: user.lastLogin,
+          hasAccount: user.hasAccount,
+    });
+  }
     const users = await models.User.findAll({where: {is_deleted: false}});
     return users
       ? res.status(200).json(users.map(user => ({
@@ -46,53 +69,8 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
     
-    const account = await models.Account.findOne({
-      where: { userId: id },
-    });
-    if (!account) {
-      return res.status(200).json({
-        user: user,
-        account: null,
-        loans: [],
-        transactions: [],
-      });
-    }
 
-    let loans = await models.Loan.findAll({
-      where: { accountId: account?.id },
-      include: [
-        {
-          model: models.LoanSummary,
-          as: 'summary',
-          required: false,
-          attributes: ['monthlyPayment', 'totalInterest', 'remainingBalance'],
-        },
-      ],
-    });
-    if (!loans) {
-      loans = [];
-    }
-
-    const transactions = await models.Transaction.findAll({
-      where: { accountId: account?.id },
-      order: ['type'],
-    });
-
-    const groupedTransactions = transactions.reduce<Record<string, any[]>>((acc, transaction) => {
-      const type = transaction.type as string;
-      if (!acc[type]) {
-        acc[type] = [];
-      }
-      acc[type].push(transaction.get({ plain: true }));
-      return acc;
-    }, {});
-
-    return res.status(200).json({
-      user: user,
-      account,
-      loans,
-      transactions: groupedTransactions,
-    });
+    return res.status(200).json(user);
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Internal server error' });

@@ -8,16 +8,19 @@ const router = Router();
 
 // Get all accounts
 router.get('/', async (req, res) => {
+  const {userId, accountId } = req.query
   try {
+  if (userId){
+      const account = await models.Account.findOne({
+        where: { userId: String(userId), is_deleted: false },
+      })
+      return res.status(200).json(account);
+  }else if (accountId) {
+    const account = await models.Account.findByPk(accountId as string)
+      return res.status(200).json(account);
+  }
     const accounts = await models.Account.findAll({
       where: { is_deleted: false },
-      include: [
-        {
-          model: models.User,
-          as: 'owner',
-          attributes: ['id', 'first_name', 'last_name', 'other_name'],
-        },
-      ],
     });
     return res.status(200).json(accounts);
   } catch (error) {
@@ -31,8 +34,8 @@ router.post('/', async (req, res) => {
     const { userId, balance, status, paidMembership } = req.body;
     
     // Validate input
-    if (!userId || !balance || !status) {
-      return res.status(400).json({ error: 'All fields are required' });
+    if (!userId ) {
+      return res.status(400).json({ error: 'UserId field is required' });
     }
 
     // Check if user exists
@@ -142,15 +145,8 @@ router.patch('/:id', async (req, res) => {
     });
 
     // Return updated account
-    const updatedAccount = await models.Account.findByPk(id, {
-      include: [
-        {
-          model: models.User,
-          as: 'owner',
-          attributes: ['id', 'first_name', 'last_name', 'other_name'],
-        },
-      ],
-    });
+    const updatedAccount = await models.Account.findByPk(id);
+    
     res.status(200).json(updatedAccount);
   } catch (error) {
     if (error instanceof Error && error.name === 'SequelizeValidationError') {

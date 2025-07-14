@@ -70,7 +70,7 @@ Account.init(
     },
     is_deleted: {
       type: DataTypes.BOOLEAN,
-      allowNull: true,
+      allowNull: false,
       defaultValue: false,
     },
     deleted_at: {
