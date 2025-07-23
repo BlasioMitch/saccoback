@@ -48,25 +48,18 @@ router.post('/login', async (req, res) => {
       JWT_SECRET,
       { expiresIn: '1d' }
     );
-    // set HTTP-only cookie
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production', // Set to true in production
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // Prevent CSRF attacks
-      maxAge: 24 * 60 * 60 * 1000, // 1 day
-    });
+    // Being done in Graphql server
+    // // set HTTP-only cookie
+    // res.cookie('token', token, {
+    //   httpOnly: true,
+    //   secure: process.env.NODE_ENV === 'production', // Set to true in production
+    //   sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // Prevent CSRF attacks
+    //   maxAge: 24 * 60 * 60 * 1000, // 1 day
+    // });
 
     // Return user data and token
     res.json({
-      user: {
-        id: user.id,
-        firstName: user.first_name,
-        lastName: user.last_name,
-        otherName: user.other_name,
-        email: user.email,
-        role: user.role,
-        gender: user.gender,
-      },
+      user: user,
       token,
     });
   } catch (error) {
