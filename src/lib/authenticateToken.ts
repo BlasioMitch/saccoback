@@ -12,7 +12,7 @@ interface JwtPayload {
 }
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret';
-const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET || 'your-internal-api-key';
+const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY;
 
 const publicRoutes = [
   '/api/auth/login',
@@ -26,18 +26,18 @@ export const authenticateToken = (req: AuthenticatedRequest, res: Response, next
   if (publicRoutes.includes(req.path)) return next();
 
   const apiKey = req.headers['graph-api-key'] as string | undefined;
-  const token = req.cookies?.token;
+  // const token = req.cookies?.token;
 
   // ✅ 1. Allow internal service-to-service requests with signed API key (JWT)
   if (apiKey) {
     try {
-      const payload = jwt.verify(apiKey, INTERNAL_API_SECRET) as JwtPayload;
+      // const payload = jwt.verify(apiKey, INTERNAL_API_SECRET) as JwtPayload;
 
-      if (payload?.service === 'graphql') {
-        req.user = { role: 'internal-service', service: payload.service };
+      if (apiKey === INTERNAL_API_KEY) {
+        req.user = { role: 'internal-service', service: 'graphql' };
         return next();
       } else {
-        console.warn('❌ Invalid service field in API key payload');
+        console.warn('❌ Invalid API Key provided');
         return res.status(403).json({ message: 'Invalid API key' });
       }
     } catch (err: any) {
@@ -47,16 +47,16 @@ export const authenticateToken = (req: AuthenticatedRequest, res: Response, next
   }
 
   // ✅ 2. Allow browser requests with JWT in cookie
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, JWT_SECRET);
-      req.user = decoded;
-      return next();
-    } catch (err: any) {
-      console.warn('❌ Token verification failed:', err.message);
-      return res.status(403).json({ message: 'Invalid or expired token' });
-    }
-  }
+  // if (token) {
+  //   try {
+  //     const decoded = jwt.verify(token, JWT_SECRET);
+  //     req.user = decoded;
+  //     return next();
+  //   } catch (err: any) {
+  //     console.warn('❌ Token verification failed:', err.message);
+  //     return res.status(403).json({ message: 'Invalid or expired token' });
+  //   }
+  // }
 
   // ❌ Neither token nor valid API key present
   return res.status(401).json({ message: 'Unauthorized access' });
