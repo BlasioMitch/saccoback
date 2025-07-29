@@ -33,10 +33,9 @@ const requestLogger = (req: express.Request, res: express.Response, next: expres
 };
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
-  'http://localhost:3000',
-  'http://localhost:3002',
-  'http://localhost:5173',
-  'http://localhost:4000',
+  'http://localhost:5173', // direct from frontend
+  'http://localhost:4000', // direct from GraphQL server
+  'https://sacco-graphql-server.onrender.com', // direct from GraphQL production server
 ];
 
 // CORS configuration
