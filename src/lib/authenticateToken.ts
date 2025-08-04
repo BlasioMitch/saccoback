@@ -25,6 +25,7 @@ export const authenticateToken = (req: AuthenticatedRequest, res: Response, next
   // Skip auth for public routes
   if (publicRoutes.includes(req.path)) return next();
 
+console.log('Incoming graph-api-key header: ', req.headers['graph-api-key']);
   const apiKey = req.headers['graph-api-key'] as string | undefined;
   // const token = req.cookies?.token;
 
@@ -34,6 +35,7 @@ export const authenticateToken = (req: AuthenticatedRequest, res: Response, next
       // const payload = jwt.verify(apiKey, INTERNAL_API_SECRET) as JwtPayload;
 
       if (apiKey === INTERNAL_API_KEY) {
+      console.log('Internal service authenticated via API key');
         req.user = { role: 'internal-service', service: 'graphql' };
         return next();
       } else {
