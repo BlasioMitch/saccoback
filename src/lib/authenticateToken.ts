@@ -25,14 +25,12 @@ export const authenticateToken = (req: AuthenticatedRequest, res: Response, next
   // Skip auth for public routes
   if (publicRoutes.includes(req.path)) return next();
 
-console.log('Incoming graph-api-key header: ', req.headers['graph-api-key']);
+// console.log('Incoming graph-api-key header: ', req.headers['graph-api-key']);
   const apiKey = req.headers['graph-api-key'] as string | undefined;
-  // const token = req.cookies?.token;
 
   // ✅ 1. Allow internal service-to-service requests with signed API key (JWT)
   if (apiKey) {
     try {
-      // const payload = jwt.verify(apiKey, INTERNAL_API_SECRET) as JwtPayload;
 
       if (apiKey === INTERNAL_API_KEY) {
       console.log('Internal service authenticated via API key');
@@ -47,18 +45,6 @@ console.log('Incoming graph-api-key header: ', req.headers['graph-api-key']);
       return res.status(403).json({ message: 'Invalid or expired API key' });
     }
   }
-
-  // ✅ 2. Allow browser requests with JWT in cookie
-  // if (token) {
-  //   try {
-  //     const decoded = jwt.verify(token, JWT_SECRET);
-  //     req.user = decoded;
-  //     return next();
-  //   } catch (err: any) {
-  //     console.warn('❌ Token verification failed:', err.message);
-  //     return res.status(403).json({ message: 'Invalid or expired token' });
-  //   }
-  // }
 
   // ❌ Neither token nor valid API key present
   return res.status(401).json({ message: 'Unauthorized access' });
