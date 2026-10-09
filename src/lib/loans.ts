@@ -1,6 +1,6 @@
 import type { Transaction as DbTransaction } from 'sequelize';
 import { models } from '../models/index.js';
-import { LoanStatus } from '../models/loan.js';
+import { LoanStatus, OPEN_LOAN_STATUSES, APPLICATION_STATUSES } from '../models/loan.js';
 import { TransactionStatus, TransactionType } from '../models/transaction.js';
 import { calculateMonthlyPayment, calculateTotalInterest } from './utils.js';
 
@@ -31,15 +31,23 @@ export async function recalculateLoanSummary(loanId: string, transaction?: DbTra
 
   // PAID follows the balance: cleared -> PAID; a PAID loan that owes again (e.g. amount raised) -> ACTIVE.
   // DEFAULTED is an officer's decision and is left alone while money is owed.
+  // Applications (PENDING / REJECTED) keep their status; their summary is just an estimate.
   const previousStatus = loan.status;
   let status = previousStatus;
-  if (remainingBalance === 0) status = LoanStatus.PAID;
-  else if (previousStatus === LoanStatus.PAID) status = LoanStatus.ACTIVE;
+  if (!APPLICATION_STATUSES.includes(previousStatus)) {
+    if (remainingBalance === 0) status = LoanStatus.PAID;
+    else if (previousStatus === LoanStatus.PAID) status = LoanStatus.ACTIVE;
+  }
   if (status !== previousStatus) {
     await loan.update({ status }, { transaction });
   }
+  // The account "has a loan" only while one is being repaid
+  const openLoans = await models.Loan.count({
+    where: { accountId: loan.accountId, status: [...OPEN_LOAN_STATUSES] },
+    transaction,
+  });
   await models.Account.update(
-    { hasLoan: status !== LoanStatus.PAID },
+    { hasLoan: openLoans > 0 },
     { where: { id: loan.accountId }, transaction }
   );
 

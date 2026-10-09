@@ -5,10 +5,18 @@ import Account from './account.js';
 import LoanSummary from './loanSummary.js';
 
 export enum LoanStatus {
+  // Member applications awaiting a manager's decision
+  PENDING = 'PENDING',
   ACTIVE = 'ACTIVE',
   PAID = 'PAID',
   DEFAULTED = 'DEFAULTED',
+  REJECTED = 'REJECTED',
 }
+
+// Loans the member is currently repaying (applications and closed loans are not "open")
+export const OPEN_LOAN_STATUSES: readonly LoanStatus[] = [LoanStatus.ACTIVE, LoanStatus.DEFAULTED];
+// Applications never became loans: excluded from the loan book and reports
+export const APPLICATION_STATUSES: readonly LoanStatus[] = [LoanStatus.PENDING, LoanStatus.REJECTED];
 
 interface LoanAttributes {
   accountId: string;
@@ -18,6 +26,9 @@ interface LoanAttributes {
   status: LoanStatus;
   startDate: Date;
   endDate: Date;
+  purpose?: string | null;
+  decisionNote?: string | null;
+  decidedAt?: Date | null;
   summary?: LoanSummary;
 }
 
@@ -29,6 +40,9 @@ class Loan extends BaseModel<LoanAttributes> implements LoanAttributes {
   public status!: LoanStatus;
   public startDate!: Date;
   public endDate!: Date;
+  public purpose?: string | null;
+  public decisionNote?: string | null;
+  public decidedAt?: Date | null;
   public summary?: LoanSummary;
 }
 
@@ -67,6 +81,20 @@ Loan.init(
     endDate: {
       type: DataTypes.DATE,
       allowNull: false,
+    },
+    // Member's reason when applying from the app
+    purpose: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    // Manager's note on approval/rejection (the rejection reason is shown to the member)
+    decisionNote: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    decidedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
     },
   },
   {

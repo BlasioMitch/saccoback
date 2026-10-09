@@ -5,18 +5,32 @@ import sequelize from '../../lib/sequelize.js';
 import { sendLoanCreationEmail, sendLoanCompletionEmail } from '../../lib/mailer.js';
 import { moneyFieldError } from '../../lib/money.js';
 import { bulkHandler } from '../../lib/bulk.js';
-import { createLoan } from '../../services/loans.js';
+import { applyForLoan, approveLoan, createLoan, rejectLoan } from '../../services/loans.js';
+import { APPLICATION_STATUSES } from '../../models/loan.js';
+import { Op } from 'sequelize';
 import { describeError } from '../../services/errors.js';
+import { payLoanFromSavings } from '../../services/transactions.js';
 
 const router = Router();
 
 // Get all loans
 // Get all loans /loans?accountId=1
 router.get('/', async (req, res) => {
-  const { accountId } = req.query;
+  const { accountId, status } = req.query;
   try {
   // Summary included so reports (e.g. loan payments) need no per-loan request
   const include = [{ model: models.LoanSummary, as: 'summary' }];
+  // ?status=PENDING or ?status=PENDING,REJECTED selects by status (e.g. the applications page)
+  if (status) {
+      const statuses = String(status).split(',').map(value => value.trim().toUpperCase());
+      const loans = await models.Loan.findAll({
+        where: { status: statuses, ...(accountId && { accountId: accountId as string }) },
+        include,
+        order: [['createdAt', 'DESC']],
+      });
+      return res.status(200).json(loans);
+  }
+  // One account's history includes its applications (member app)
   if (accountId) {
       const loans = await models.Loan.findAll({
         where: { accountId: accountId as string },
@@ -24,7 +38,11 @@ router.get('/', async (req, res) => {
       });
       return res.status(200).json(loans);
   }
-    const loans = await models.Loan.findAll({ include });
+    // The loan book and reports: applications never became loans
+    const loans = await models.Loan.findAll({
+      where: { status: { [Op.notIn]: [...APPLICATION_STATUSES] } },
+      include,
+    });
     
     return res.status(200).json(loans);
   } catch (error) {
@@ -110,6 +128,52 @@ router.post('/', async (req, res) => {
     });
 
     res.status(201).json(loan);
+  } catch (error) {
+    const { status, message } = describeError(error);
+    res.status(status).json({ error: message });
+  }
+});
+
+// Member loan application (userId comes from the gateway session, never from the app)
+router.post('/applications', async (req, res) => {
+  try {
+    const loan = await sequelize.transaction((transaction) => applyForLoan(req.body.userId, req.body, { transaction }));
+    const created = await models.Loan.findByPk(loan.id, { include: [{ model: models.LoanSummary, as: 'summary' }] });
+    res.status(201).json(created);
+  } catch (error) {
+    const { status, message } = describeError(error);
+    res.status(status).json({ error: message });
+  }
+});
+
+// Repay from savings: withdraws from the account and records the loan payment in one DB transaction
+router.post('/:id/pay-from-savings', async (req, res) => {
+  try {
+    const { withdrawal, payment } = await sequelize.transaction((transaction) => payLoanFromSavings(req.params.id, req.body, { transaction }));
+    const loan = await models.Loan.findByPk(req.params.id, { include: [{ model: models.LoanSummary, as: 'summary' }] });
+    res.status(201).json({ withdrawal, payment, loan });
+  } catch (error) {
+    const { status, message } = describeError(error);
+    res.status(status).json({ error: message });
+  }
+});
+
+// Manager decisions on applications
+router.post('/:id/approve', async (req, res) => {
+  try {
+    const loan = await sequelize.transaction((transaction) => approveLoan(req.params.id, req.body, { transaction }));
+    const updated = await models.Loan.findByPk(loan.id, { include: [{ model: models.LoanSummary, as: 'summary' }] });
+    res.status(200).json(updated);
+  } catch (error) {
+    const { status, message } = describeError(error);
+    res.status(status).json({ error: message });
+  }
+});
+
+router.post('/:id/reject', async (req, res) => {
+  try {
+    const loan = await sequelize.transaction((transaction) => rejectLoan(req.params.id, req.body, { transaction }));
+    res.status(200).json(loan);
   } catch (error) {
     const { status, message } = describeError(error);
     res.status(status).json({ error: message });
