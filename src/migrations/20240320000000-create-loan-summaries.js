@@ -21,15 +21,15 @@ module.exports = {
         onDelete: 'CASCADE',
       },
       monthlyPayment: {
-        type: Sequelize.DECIMAL(10, 2),
+        type: Sequelize.BIGINT,
         allowNull: false,
       },
       totalInterest: {
-        type: Sequelize.DECIMAL(10, 2),
+        type: Sequelize.BIGINT,
         allowNull: false,
       },
       remainingBalance: {
-        type: Sequelize.DECIMAL(10, 2),
+        type: Sequelize.BIGINT,
         allowNull: false,
       },
       createdAt: {

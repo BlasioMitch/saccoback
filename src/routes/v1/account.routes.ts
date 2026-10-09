@@ -3,6 +3,7 @@ import { models } from '../../models/index.js';
 import { generateUniqueAccountNumber } from '../../lib/utils.js';
 import { TransactionStatus, TransactionType } from '../../models/transaction.js';
 import { sendAccountCreationEmail } from '../../lib/mailer.js';
+import { moneyFieldError } from '../../lib/money.js';
 
 const router = Router();
 
@@ -32,6 +33,11 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { userId, balance, status, paidMembership } = req.body;
+
+    const moneyError = moneyFieldError(req.body, ['balance']);
+    if (moneyError) {
+      return res.status(400).json({ error: moneyError });
+    }
     
     // Validate input
     if (!userId ) {
@@ -130,6 +136,11 @@ router.patch('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { balance, status, paidMembership } = req.body;
+
+    const moneyError = moneyFieldError(req.body, ['balance']);
+    if (moneyError) {
+      return res.status(400).json({ error: moneyError });
+    }
 
     // Find account by ID
     const account = await models.Account.findByPk(id);

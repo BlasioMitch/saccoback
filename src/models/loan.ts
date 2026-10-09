@@ -44,7 +44,7 @@ Loan.init(
       },
     },
     amount: {
-      type: DataTypes.DECIMAL(10, 2),
+      type: DataTypes.BIGINT,
       allowNull: false,
     },
     interestRate: {

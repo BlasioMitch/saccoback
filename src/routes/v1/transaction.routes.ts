@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { models } from '../../models/index.js';
-import { calculateRemainingBalance } from '../../lib/utils.js';
-import { LoanStatus } from '../../models/loan.js';
+import { recalculateLoanSummary } from '../../lib/loans.js';
 import { sendTransactionEmail } from '../../lib/mailer.js';
+import { moneyFieldError } from '../../lib/money.js';
 
 const router = Router();
 
@@ -30,6 +30,11 @@ router.post('/', async (req, res) => {
   try {
     const { accountId, type, amount, status, loanId } = req.body;
 
+    const moneyError = moneyFieldError(req.body, ['amount']);
+    if (moneyError) {
+      return res.status(400).json({ error: moneyError });
+    }
+
     // Validate input
     if (!accountId || !type || !amount || !status) {
       return res.status(400).json({ error: 'All fields are required' });
@@ -46,6 +51,10 @@ router.post('/', async (req, res) => {
       return res.status(404).json({ error: 'Account not found' });
     }
 
+    if (type === 'LOAN_PAYMENT' && !(await models.Loan.findByPk(loanId))) {
+      return res.status(404).json({ error: 'Loan not found' });
+    }
+
     // Create new transaction
     const newTransaction = await models.Transaction.create({
       accountId,
@@ -58,31 +67,8 @@ router.post('/', async (req, res) => {
 
     // Update the loan summary for loan payments
     if (type === 'LOAN_PAYMENT' && loanId) {
-      const loanSummary = await models.LoanSummary.findOne({
-        where: {loanId:loanId}});
-      if (!loanSummary) {
-        return res.status(404).json({ error: 'Loan summary not found' });
-      }
-      
-      // Update remaining balance
-      const newRemainingBalance = calculateRemainingBalance(loanSummary.remainingBalance, amount);
-      
-      // Update loan summary
-      await loanSummary.update({
-        remainingBalance: newRemainingBalance,
-      });
-
-      // If remaining balance is 0, update loan status to PAID
-      if (newRemainingBalance <= 0) {
-        const loan = await models.Loan.findByPk(loanId);
-        if (loan) {
-          await loan.update({ status: LoanStatus.PAID });
-          await models.Account.update(
-            { hasLoan: false },
-            { where: { id: loan.accountId as string } }
-          );
-        }
-      }
+      // Balance = total owed - COMPLETED payments; also flips the loan to PAID when cleared
+      await recalculateLoanSummary(loanId);
     } else if (
                type === 'ACCOUNT_WITHDRAW' || 
                type === 'CLOSURE_WITHDRAW') {
@@ -144,51 +130,32 @@ router.patch('/:id', async (req, res) => {
     const { id } = req.params;
     const { accountId, type, amount, status, loanId } = req.body;
 
+    const moneyError = moneyFieldError(req.body, ['amount']);
+    if (moneyError) {
+      return res.status(400).json({ error: moneyError });
+    }
+
     // Find transaction by ID
     const transaction = await models.Transaction.findByPk(id);
     if (!transaction) {
       return res.status(404).json({ error: 'Transaction not found' });
     }
 
-    // If this is a loan payment, update the loan summary
-    if (type === 'LOAN_PAYMENT' && loanId) {
-      const loanSummary = await models.LoanSummary.findByPk(loanId);
-      if (!loanSummary) {
-        return res.status(404).json({ error: 'Loan summary not found' });
-      }
+    const previous = { type: transaction.type, loanId: transaction.loanId };
 
-      // Calculate the difference in amount
-      const amountDifference = amount - transaction.amount;
-      
-      // Update remaining balance
-      const newRemainingBalance = calculateRemainingBalance(loanSummary.remainingBalance, amountDifference);
-      
-      // Update loan summary
-      await loanSummary.update({
-        remainingBalance: newRemainingBalance,
-      });
+    // Only fields that were sent; undefined would otherwise overwrite stored values
+    const changes = Object.fromEntries(
+      Object.entries({ accountId, type, amount, status, loanId }).filter(([, value]) => value !== undefined)
+    );
+    await transaction.update(changes);
 
-      // If remaining balance is 0, update loan status to PAID
-      if (newRemainingBalance <= 0) {
-        const loan = await models.Loan.findByPk(loanId);
-        if (loan) {
-          await loan.update({ status: LoanStatus.PAID });
-          await models.Account.update(
-            { hasLoan: false },
-            { where: { id: loan.accountId as string } }
-          );
-        }
-      }
+    // Amount, status or loan of a payment may have changed: recalculate every loan it touched
+    const affectedLoans = new Set<string>();
+    if (previous.type === 'LOAN_PAYMENT' && previous.loanId) affectedLoans.add(previous.loanId);
+    if (transaction.type === 'LOAN_PAYMENT' && transaction.loanId) affectedLoans.add(transaction.loanId);
+    for (const affectedLoanId of affectedLoans) {
+      await recalculateLoanSummary(affectedLoanId);
     }
-
-    // Update transaction
-    await transaction.update({
-      accountId,
-      type,
-      amount,
-      status,
-      loanId
-    });
 
     // Return updated transaction
     const updatedTransaction = await models.Transaction.findByPk(id, {
@@ -230,8 +197,15 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Transaction not found' });
     }
 
+    const { type, loanId } = transaction;
+
     // Delete transaction
     await transaction.destroy();
+
+    // A removed payment no longer counts toward the loan
+    if (type === 'LOAN_PAYMENT' && loanId) {
+      await recalculateLoanSummary(loanId);
+    }
     res.status(200).json({ message: 'Transaction deleted successfully' });
   } catch (error) {
     console.error('Delete transaction error:', error);

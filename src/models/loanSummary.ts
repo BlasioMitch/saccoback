@@ -29,15 +29,15 @@ LoanSummary.init(
       },
     },
     monthlyPayment: {
-      type: DataTypes.DECIMAL(10, 2),
+      type: DataTypes.BIGINT,
       allowNull: false,
     },
     totalInterest: {
-      type: DataTypes.DECIMAL(10, 2),
+      type: DataTypes.BIGINT,
       allowNull: false,
     },
     remainingBalance: {
-      type: DataTypes.DECIMAL(10, 2),
+      type: DataTypes.BIGINT,
       allowNull: false,
     },
   },

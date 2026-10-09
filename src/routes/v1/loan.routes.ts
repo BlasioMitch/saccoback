@@ -1,8 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { models } from '../../models/index.js';
-import { calculateMonthlyPayment, calculateTotalInterest, calculateRemainingBalance } from '../../lib/utils.js';
-import { LoanStatus } from '../../models/loan.js';
+import { recalculateLoanSummary } from '../../lib/loans.js';
+import sequelize from '../../lib/sequelize.js';
 import { sendLoanCreationEmail, sendLoanCompletionEmail } from '../../lib/mailer.js';
+import { moneyFieldError } from '../../lib/money.js';
 
 const router = Router();
 
@@ -11,13 +12,16 @@ const router = Router();
 router.get('/', async (req, res) => {
   const { accountId } = req.query;
   try {
+  // Summary included so reports (e.g. loan payments) need no per-loan request
+  const include = [{ model: models.LoanSummary, as: 'summary' }];
   if (accountId) {
       const loans = await models.Loan.findAll({
         where: { accountId: accountId as string },
+        include,
       });
       return res.status(200).json(loans);
   }
-    const loans = await models.Loan.findAll();
+    const loans = await models.Loan.findAll({ include });
     
     return res.status(200).json(loans);
   } catch (error) {
@@ -52,6 +56,11 @@ router.get('/:id/summary', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const { accountId, amount, interestRate, term, status, startDate, endDate } = req.body;
+
+    const moneyError = moneyFieldError(req.body, ['amount']);
+    if (moneyError) {
+      return res.status(400).json({ error: moneyError });
+    }
 
     // Validate input
     if (!accountId || !amount || !interestRate || !term || !status || !startDate || !endDate) {
@@ -89,17 +98,10 @@ router.post('/', async (req, res) => {
       { where: { id: accountId } }
     );
 
-    // Calculate Loan Summary
-    const monthlyPayment = calculateMonthlyPayment(amount, interestRate, term);
-    const totalInterest = calculateTotalInterest(amount, interestRate, term);
-    const remainingBalance = calculateRemainingBalance(amount*(1+interestRate/100), 0);
-
-    await models.LoanSummary.create({
-      loanId: newLoan.id,
-      monthlyPayment,
-      totalInterest,
-      remainingBalance,
-    });
+    // Calculate Loan Summary (same logic as edits and payments)
+    const recalculated = await recalculateLoanSummary(newLoan.id);
+    const monthlyPayment = Number(recalculated?.summary.monthlyPayment || 0);
+    const totalInterest = Number(recalculated?.summary.totalInterest || 0);
 
     // Send loan creation email
     try {
@@ -163,13 +165,16 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Update loan
+// Update loan: merge with stored values, then recalculate interest and balance against completed payments
 router.patch('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { accountId, amount, interestRate, term, status, startDate, endDate } = req.body;
 
-    // Find loan by ID
+    const moneyError = moneyFieldError(req.body, ['amount']);
+    if (moneyError) {
+      return res.status(400).json({ error: moneyError });
+    }
+
     const loan = await models.Loan.findByPk(id, {
       include: [
         {
@@ -184,29 +189,49 @@ router.patch('/:id', async (req, res) => {
             },
           ],
         },
-        {
-          model: models.LoanSummary,
-          as: 'summary',
-          attributes: ['monthlyPayment', 'totalInterest', 'remainingBalance'],
-        },
       ],
     });
     if (!loan) {
       return res.status(404).json({ error: 'Loan not found' });
     }
 
-    // If status is completed, update the account to false for hasLoan
-    if (status === LoanStatus.PAID) {
-      await models.Account.update(
-        { hasLoan: false },
-        { where: { id: loan.accountId } }
-      );
+    // Partial updates: fields not sent keep their stored values
+    const editable = ['accountId', 'amount', 'interestRate', 'term', 'status', 'startDate', 'endDate'] as const;
+    const changes: Record<string, unknown> = {};
+    for (const field of editable) {
+      if (req.body[field] !== undefined && req.body[field] !== null) changes[field] = req.body[field];
+    }
+    const merged = {
+      amount: Number(changes.amount ?? loan.amount),
+      interestRate: Number(changes.interestRate ?? loan.interestRate),
+      term: Number(changes.term ?? loan.term),
+      startDate: new Date((changes.startDate ?? loan.startDate) as string | Date),
+      endDate: new Date((changes.endDate ?? loan.endDate) as string | Date),
+    };
+    if (!(merged.amount > 0)) {
+      return res.status(400).json({ error: 'amount must be greater than 0' });
+    }
+    if (!(merged.interestRate >= 0)) {
+      return res.status(400).json({ error: 'interestRate must be 0 or more' });
+    }
+    if (!Number.isInteger(merged.term) || merged.term < 1) {
+      return res.status(400).json({ error: 'term must be a whole number of months, at least 1' });
+    }
+    if (!(merged.endDate > merged.startDate)) {
+      return res.status(400).json({ error: 'endDate must be after startDate' });
+    }
 
-      // Send loan completion email
+    // Loan terms and the summary change together or not at all
+    const result = await sequelize.transaction(async (transaction) => {
+      await loan.update(changes, { transaction });
+      return recalculateLoanSummary(id, transaction);
+    });
+
+    // Email only on the transition to PAID, not on every save of a paid loan
+    if (result?.statusChangedToPaid) {
       try {
         const owner = (loan as any).account?.owner;
         if (owner && owner.email) {
-          // Get all loan payment transactions
           const transactions = await models.Transaction.findAll({
             where: {
               loanId: id,
@@ -222,11 +247,11 @@ router.patch('/:id', async (req, res) => {
             name: `${owner.first_name} ${owner.last_name}`,
             loanId: loan.id,
             accountNumber: (loan as any).account.accountNumber,
-            loanAmount: loan.amount,
-            interestRate: loan.interestRate,
-            term: loan.term,
-            totalInterest: loan.summary?.totalInterest || 0,
-            totalAmount: Number(loan.amount) + Number(loan.summary?.totalInterest || 0),
+            loanAmount: merged.amount,
+            interestRate: merged.interestRate,
+            term: merged.term,
+            totalInterest: Number(result.summary.totalInterest),
+            totalAmount: merged.amount + Number(result.summary.totalInterest),
             completionDate: new Date().toLocaleDateString(),
             transactions: transactions.map(t => ({
               date: new Date(t.createdAt).toLocaleDateString(),
@@ -241,45 +266,7 @@ router.patch('/:id', async (req, res) => {
       }
     }
 
-    // Update loan
-    await loan.update({
-      accountId,
-      amount,
-      interestRate,
-      term,
-      status,
-      startDate,
-      endDate,
-    });
-
-    // Update Loan Summary
-    const loanSummary = await models.LoanSummary.findOne({
-      where: { loanId: id },
-    });
-    if (loanSummary) {
-      const monthlyPayment = calculateMonthlyPayment(amount, interestRate, term);
-      const totalInterest = calculateTotalInterest(amount, interestRate, term);
-      const remainingBalance = calculateRemainingBalance(amount, 0);
-      await loanSummary.update({
-        monthlyPayment,
-        totalInterest,
-        remainingBalance,
-      });
-    } else {
-      const monthlyPayment = calculateMonthlyPayment(amount, interestRate, term);
-      const totalInterest = calculateTotalInterest(amount, interestRate, term);
-      const remainingBalance = calculateRemainingBalance(amount*(1+interestRate/100), 0);
-      await models.LoanSummary.create({
-        loanId: id,
-        monthlyPayment,
-        totalInterest,
-        remainingBalance,
-      });
-    }
-
-    // Return updated loan
     const updatedLoan = await models.Loan.findByPk(id);
-    
     res.status(200).json(updatedLoan);
   } catch (error) {
     console.error('Update loan error:', error);

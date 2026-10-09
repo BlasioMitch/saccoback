@@ -49,7 +49,7 @@ Account.init(
       allowNull: false,
     },
     balance: {
-      type: DataTypes.DECIMAL(10, 2),
+      type: DataTypes.BIGINT,
       allowNull: false,
       defaultValue: 0,
     },
