@@ -33,6 +33,7 @@ interface UserAttributes {
   gender: Gender;
   dob: Date;
   hasAccount?: boolean;
+  avatar?: string | null;
   is_deleted?: boolean;
   deleted_at?: Date;
 }
@@ -52,6 +53,7 @@ class User extends BaseModel<UserAttributes> implements UserAttributes {
   public last_name!: string;
   public other_name!: string;
   public hasAccount?: boolean ;
+  public avatar?: string | null;
   public is_deleted?: boolean;
   public deleted_at?: Date | undefined;
   public getFullName(): string {
@@ -115,6 +117,12 @@ User.init(
     dob: {
       type: DataTypes.DATE,
       allowNull: false,
+    },
+    // Profile picture as a resized JPEG data URL (set by the member in Settings); null shows initials
+    avatar: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      defaultValue: null,
     },
     hasAccount: {
       type: DataTypes.BOOLEAN,

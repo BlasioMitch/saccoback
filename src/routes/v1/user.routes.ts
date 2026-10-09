@@ -3,6 +3,9 @@ import bcrypt from 'bcryptjs';
 import { models } from '../../models/index.js';
 import  { AccountStatus } from '../../models/account.js';
 import { sendAccountCreationEmail } from '../../lib/mailer.js';
+import { bulkHandler } from '../../lib/bulk.js';
+import { createUser, findUserByEmail, MAX_AVATAR_LENGTH, toUserResponse, UPDATABLE_USER_FIELDS } from '../../services/users.js';
+import { describeError } from '../../services/errors.js';
 
 const router = Router();
 
@@ -15,41 +18,11 @@ router.get('/', async (req, res) => {
     if (!user || user.is_deleted) {
       return res.status(404).json({ error: 'User not found' });
     }
-    return res.status(200).json({
-          id: user.id,
-          first_name: user.first_name,
-          last_name: user.last_name,
-          other_name: user.other_name,
-          fullName: user.getFullName(),
-          email: user.email,
-          role: user.role,
-          status: user.status,
-          contact: user.contact,
-          gender: user.gender,
-          dob: user.dob,
-          joinDate: user.joinDate,
-          lastLogin: user.lastLogin,
-          hasAccount: user.hasAccount,
-    });
+    return res.status(200).json(toUserResponse(user));
   }
     const users = await models.User.findAll({where: {is_deleted: false}});
     return users
-      ? res.status(200).json(users.map(user => ({
-          id: user.id,
-          first_name: user.first_name,
-          last_name: user.last_name,
-          other_name: user.other_name,
-          fullName: user.getFullName(),
-          email: user.email,
-          role: user.role,
-          status: user.status,
-          contact: user.contact,
-          gender: user.gender,
-          dob: user.dob,
-          joinDate: user.joinDate,
-          lastLogin: user.lastLogin,
-          hasAccount: user.hasAccount,
-        })))
+      ? res.status(200).json(users.map(toUserResponse))
       : res.status(404).json({ error: 'No users found' });
   } catch (error) {
     console.error('Get user error:', error);
@@ -68,9 +41,8 @@ router.get('/:id', async (req, res) => {
     if (!user || user.is_deleted) {
       return res.status(404).json({ error: 'User not found' });
     }
-    
 
-    return res.status(200).json(user);
+    return res.status(200).json(toUserResponse(user));
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -80,34 +52,7 @@ router.get('/:id', async (req, res) => {
 // Create user
 router.post('/', async (req, res) => {
   try {
-    const { first_name, last_name, other_name, email, password, role, status, contact, dob, gender } = req.body;
-    
-    if (!first_name || !last_name || !email || !role || !status || !contact || !dob || !gender) {
-      return res.status(400).json({ error: 'All fields are required' });
-    }
-
-    const existingUser = await models.User.findOne({ where: { email } });
-    if (existingUser) {
-      return res.status(409).json({ error: 'User already exists' });
-    }
-
-    const hashedPassword = password 
-      ? await bcrypt.hash(password, 10)
-      : await bcrypt.hash('password123', 10);
-
-    const newUser = await models.User.create({
-      first_name,
-      last_name,
-      other_name,
-      email,
-      password: hashedPassword,
-      role,
-      status,
-      contact,
-      dob,
-      gender,
-      joinDate: new Date(),
-    });
+    const newUser = await createUser(req.body);
 
     // Send welcome email
     try {
@@ -121,27 +66,18 @@ router.post('/', async (req, res) => {
       // Don't fail the request if email fails
     }
 
-    res.status(201).json({
-      id: newUser.id,
-      first_name: newUser.first_name,
-      last_name: newUser.last_name,
-      other_name: newUser.other_name,
-      email: newUser.email,
-      role: newUser.role,
-      status: newUser.status,
-      contact: newUser.contact,
-      gender: newUser.gender,
-      dob: newUser.dob,
-      joinDate: newUser.joinDate,
-      lastLogin: newUser.lastLogin,
-      fullName: newUser.getFullName(),
-      hasAccount: newUser.hasAccount,
-    });
+    res.status(201).json(toUserResponse(newUser));
   } catch (error) {
-    console.error('Create user error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    const { status, message } = describeError(error);
+    res.status(status).json({ error: message });
   }
 });
+
+// Bulk import (CSV): one user per row, no welcome emails
+router.post('/bulk', bulkHandler(async (row, transaction) => {
+  const user = await createUser(row, { transaction });
+  return user.id;
+}));
 
 // Update user
 router.patch('/:id', async (req, res) => {
@@ -152,32 +88,29 @@ router.patch('/:id', async (req, res) => {
     }
 
     const user = await models.User.findByPk(id);
-    if (!user) {
+    if (!user || user.is_deleted) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    await user.update({
-      ...req.body,
-    });
+    // Only profile, avatar, role and status are editable here (never password or flags)
+    const changes = Object.fromEntries(
+      UPDATABLE_USER_FIELDS.filter(field => req.body[field] !== undefined).map(field => [field, req.body[field]])
+    );
+    if (typeof changes.avatar === 'string' && changes.avatar.length > MAX_AVATAR_LENGTH) {
+      return res.status(400).json({ error: 'Avatar image is too large' });
+    }
+    if (changes.email) {
+      const existing = await findUserByEmail(String(changes.email));
+      if (existing && existing.id !== user.id) {
+        return res.status(409).json({ error: `A user with email ${changes.email} already exists` });
+      }
+    }
 
-    res.status(200).json({
-      id: user.id,
-      first_name: user.first_name,
-      last_name: user.last_name,
-      other_name: user.other_name,
-      email: user.email,
-      role: user.role,
-      status: user.status,
-      contact: user.contact,
-      dob: user.dob,
-      gender: user.gender,
-      joinDate: user.joinDate,
-      lastLogin: user.lastLogin,
-      hasAccount: user.hasAccount,
-    });
+    await user.update(changes);
+    res.status(200).json(toUserResponse(user));
   } catch (error) {
-    console.error('Update user error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    const { status, message } = describeError(error);
+    res.status(status).json({ error: message });
   }
 });
 

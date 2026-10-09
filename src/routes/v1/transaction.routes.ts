@@ -3,6 +3,10 @@ import { models } from '../../models/index.js';
 import { recalculateLoanSummary } from '../../lib/loans.js';
 import { sendTransactionEmail } from '../../lib/mailer.js';
 import { moneyFieldError } from '../../lib/money.js';
+import sequelize from '../../lib/sequelize.js';
+import { bulkHandler } from '../../lib/bulk.js';
+import { createTransaction } from '../../services/transactions.js';
+import { describeError } from '../../services/errors.js';
 
 const router = Router();
 
@@ -28,63 +32,9 @@ router.get('/', async (req, res) => {
 // Create transaction
 router.post('/', async (req, res) => {
   try {
-    const { accountId, type, amount, status, loanId } = req.body;
-
-    const moneyError = moneyFieldError(req.body, ['amount']);
-    if (moneyError) {
-      return res.status(400).json({ error: moneyError });
-    }
-
-    // Validate input
-    if (!accountId || !type || !amount || !status) {
-      return res.status(400).json({ error: 'All fields are required' });
-    }
-
-    // Check if LoanID is attached with type Loan_Payment
-    if (type === 'LOAN_PAYMENT' && !loanId) {
-      return res.status(400).json({ error: 'Loan ID is required for Loan_Payment type' });
-    }
-
-    // Check if account exists
-    const account = await models.Account.findByPk(accountId);
-    if (!account) {
-      return res.status(404).json({ error: 'Account not found' });
-    }
-
-    if (type === 'LOAN_PAYMENT' && !(await models.Loan.findByPk(loanId))) {
-      return res.status(404).json({ error: 'Loan not found' });
-    }
-
-    // Create new transaction
-    const newTransaction = await models.Transaction.create({
-      accountId,
-      accountName: account.accountNumber,
-      type,
-      amount,
-      status,
-      loanId
-    });
-
-    // Update the loan summary for loan payments
-    if (type === 'LOAN_PAYMENT' && loanId) {
-      // Balance = total owed - COMPLETED payments; also flips the loan to PAID when cleared
-      await recalculateLoanSummary(loanId);
-    } else if (
-               type === 'ACCOUNT_WITHDRAW' || 
-               type === 'CLOSURE_WITHDRAW') {
-      await account.update({
-        balance: Number(account.balance) - Number(amount),
-      });
-    } else if (type === 'SAVINGS_DEPOSIT') {
-      await account.update({
-        balance: Number(account.balance) + Number(amount),
-      });
-    } else if (type === 'MEMBERSHIP_FEE' ){
-      await account.update({
-        balance: Number(account.balance) - Number(amount),
-        paidMembership: true,
-      });
-    }
+    const { transaction: newTransaction, account } = await sequelize.transaction(
+      (transaction) => createTransaction(req.body, { transaction })
+    );
 
     // Send transaction email notification
     try {
@@ -107,22 +57,18 @@ router.post('/', async (req, res) => {
       // Don't fail the request if email fails
     }
 
-    // Return created transaction
     res.status(201).json(newTransaction);
   } catch (error) {
-    console.error('Create transaction error:', error);
-    if (error instanceof Error) {
-      if (error.name === 'SequelizeValidationError') {
-        const validationError = error as any;
-        return res.status(400).json({ error: 'Validation error', details: validationError.errors });
-      }
-      if (error.name === 'SequelizeUniqueConstraintError') {
-        return res.status(409).json({ error: 'Transaction already exists' });
-      }
-    }
-    res.status(500).json({ error: 'Internal server error' });
+    const { status, message } = describeError(error);
+    res.status(status).json({ error: message });
   }
 });
+
+// Bulk import (CSV): rows may carry a historical createdAt; no emails are sent
+router.post('/bulk', bulkHandler(async (row, transaction) => {
+  const { transaction: created } = await createTransaction(row, { transaction, allowBackdate: true });
+  return created.id;
+}));
 
 // Update transaction
 router.patch('/:id', async (req, res) => {

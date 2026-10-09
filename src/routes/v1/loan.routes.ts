@@ -4,6 +4,9 @@ import { recalculateLoanSummary } from '../../lib/loans.js';
 import sequelize from '../../lib/sequelize.js';
 import { sendLoanCreationEmail, sendLoanCompletionEmail } from '../../lib/mailer.js';
 import { moneyFieldError } from '../../lib/money.js';
+import { bulkHandler } from '../../lib/bulk.js';
+import { createLoan } from '../../services/loans.js';
+import { describeError } from '../../services/errors.js';
 
 const router = Router();
 
@@ -55,53 +58,10 @@ router.get('/:id/summary', async (req, res) => {
 // Create loan
 router.post('/', async (req, res) => {
   try {
-    const { accountId, amount, interestRate, term, status, startDate, endDate } = req.body;
-
-    const moneyError = moneyFieldError(req.body, ['amount']);
-    if (moneyError) {
-      return res.status(400).json({ error: moneyError });
-    }
-
-    // Validate input
-    if (!accountId || !amount || !interestRate || !term || !status || !startDate || !endDate) {
-      return res.status(400).json({ error: 'All fields are required' });
-    }
-
-    // Check if account exists
-    const account = await models.Account.findByPk(accountId, {
-      include: [
-        {
-          model: models.User,
-          as: 'owner',
-          attributes: ['id', 'first_name', 'last_name', 'other_name', 'email'],
-        },
-      ],
-    });
-    if (!account) {
-      return res.status(404).json({ error: 'Account not found' });
-    }
-
-    // Create new loan
-    const newLoan = await models.Loan.create({
-      accountId,
-      amount,
-      interestRate,
-      term,
-      status,
-      startDate,
-      endDate,
-    });
-
-    // Update Account hasLoan to true
-    await models.Account.update(
-      { hasLoan: true },
-      { where: { id: accountId } }
+    const { loan: newLoan, account, monthlyPayment, totalInterest } = await sequelize.transaction(
+      (transaction) => createLoan(req.body, { transaction })
     );
-
-    // Calculate Loan Summary (same logic as edits and payments)
-    const recalculated = await recalculateLoanSummary(newLoan.id);
-    const monthlyPayment = Number(recalculated?.summary.monthlyPayment || 0);
-    const totalInterest = Number(recalculated?.summary.totalInterest || 0);
+    const { amount, interestRate, term } = req.body;
 
     // Send loan creation email
     try {
@@ -151,19 +111,16 @@ router.post('/', async (req, res) => {
 
     res.status(201).json(loan);
   } catch (error) {
-    console.error('Create loan error:', error);
-    if (error instanceof Error) {
-      if (error.name === 'SequelizeValidationError') {
-        const validationError = error as any;
-        return res.status(400).json({ error: 'Validation error', details: validationError.errors });
-      }
-      if (error.name === 'SequelizeUniqueConstraintError') {
-        return res.status(409).json({ error: 'Loan already exists' });
-      }
-    }
-    res.status(500).json({ error: 'Internal server error' });
+    const { status, message } = describeError(error);
+    res.status(status).json({ error: message });
   }
 });
+
+// Bulk import (CSV): one loan per row, no emails
+router.post('/bulk', bulkHandler(async (row, transaction) => {
+  const { loan } = await createLoan(row, { transaction });
+  return loan.id;
+}));
 
 // Update loan: merge with stored values, then recalculate interest and balance against completed payments
 router.patch('/:id', async (req, res) => {
