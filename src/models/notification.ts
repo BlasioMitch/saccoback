@@ -3,11 +3,13 @@ import { BaseModel, baseAttributes } from './base.js';
 import sequelize from '../lib/sequelize.js';
 import User from './user.js';
 
-// What a notification is about; each maps to one of the member's notification settings
+// What a notification is about; the member categories map to one of the member's notification settings,
+// STAFF_REQUEST (e.g. a password reset to handle) always reaches ADMIN and MANAGER users
 export enum NotificationCategory {
   TRANSACTION = 'TRANSACTION',
   LOAN_DECISION = 'LOAN_DECISION',
   UPDATE = 'UPDATE',
+  STAFF_REQUEST = 'STAFF_REQUEST',
 }
 
 // The screen a tap should open in the app
@@ -16,6 +18,7 @@ export enum NotificationTarget {
   LOAN = 'LOAN',
   PROFILE = 'PROFILE',
   SECURITY = 'SECURITY',
+  PASSWORD_RESET = 'PASSWORD_RESET',
 }
 
 interface NotificationAttributes {

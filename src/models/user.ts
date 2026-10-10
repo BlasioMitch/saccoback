@@ -38,6 +38,8 @@ interface UserAttributes {
   notifyTransactions?: boolean;
   notifyUpdates?: boolean;
   notifyLoanDecisions?: boolean;
+  mustChangePassword?: boolean;
+  tempPasswordExpiresAt?: Date | null;
   is_deleted?: boolean;
   deleted_at?: Date;
 }
@@ -62,6 +64,8 @@ class User extends BaseModel<UserAttributes> implements UserAttributes {
   public notifyTransactions?: boolean;
   public notifyUpdates?: boolean;
   public notifyLoanDecisions?: boolean;
+  public mustChangePassword?: boolean;
+  public tempPasswordExpiresAt?: Date | null;
   public is_deleted?: boolean;
   public deleted_at?: Date | undefined;
   public getFullName(): string {
@@ -152,6 +156,18 @@ User.init(
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: true,
+    },
+    // Set when staff issue a temporary password (Forgot password); the member must choose a new one
+    // after signing in, before the temporary one expires
+    mustChangePassword: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    tempPasswordExpiresAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: null,
     },
     hasAccount: {
       type: DataTypes.BOOLEAN,

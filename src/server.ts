@@ -5,6 +5,8 @@ import { seedDatabase } from './seed.js';
 import dotenv from 'dotenv';
 import v1Routes from './routes/v1/index.js';
 import { authenticateToken } from './lib/authenticateToken.js';
+import { auditMiddleware, backfillAuditSubjects } from './lib/audit.js';
+import { pruneIdempotencyKeys } from './routes/v1/idempotency.routes.js';
 import cookieParser from 'cookie-parser';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './lib/swagger.js';
@@ -63,6 +65,7 @@ app.use(express.json({ limit: '2mb' })); // bulk CSV imports and avatar images
 app.use(requestLogger); // Add request logging middleware
 app.use(cookieParser()); // Parse cookies
 app.use(authenticateToken); // Add authentication middleware globally
+app.use(auditMiddleware); // Audit trail: every successful change, with the gateway-forwarded actor
 
 // Routes
 app.use('/api', v1Routes);
@@ -92,6 +95,8 @@ const startServer = async () => {
       await seedDatabase()
     }
     
+    void backfillAuditSubjects();
+    void pruneIdempotencyKeys();
     app.listen(port, () => {
       console.log(`
 Server started successfully!

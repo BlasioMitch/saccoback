@@ -9,9 +9,11 @@
     "start": "node dist/server.js",
     "db:seed": "NODE_OPTIONS='--loader ts-node/esm --experimental-specifier-resolution=node' node src/seed.ts",
     "db:reset": "NODE_OPTIONS='--loader ts-node/esm --experimental-specifier-resolution=node' node src/seed.ts",
+    "db:demo": "TS_NODE_LOG_ERROR=true node --loader ts-node/esm src/scripts/demo-data.ts",
     "test": "jest"
   },
   "dependencies": {
+    "@simplewebauthn/server": "^13.3.3",
     "@types/dotenv": "^6.1.1",
     "@types/sequelize": "^4.28.14",
     "bcryptjs": "^3.0.2",

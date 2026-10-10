@@ -4,7 +4,8 @@ import { models } from '../../models/index.js';
 import  { AccountStatus } from '../../models/account.js';
 import { sendAccountCreationEmail } from '../../lib/mailer.js';
 import { bulkHandler } from '../../lib/bulk.js';
-import { changeEmail, changePassword, createUser, findUserByEmail, MAX_AVATAR_LENGTH, toUserResponse, UPDATABLE_USER_FIELDS } from '../../services/users.js';
+import { changeEmail, changePassword, createUser, findUserByEmail, MAX_AVATAR_LENGTH, replaceTemporaryPassword, toUserResponse, UPDATABLE_USER_FIELDS } from '../../services/users.js';
+import { revokeDevices, startSession } from '../../services/sessions.js';
 import { notifyUser } from '../../lib/notifications.js';
 import { NotificationCategory, NotificationTarget } from '../../models/notification.js';
 import { describeError } from '../../services/errors.js';
@@ -114,7 +115,10 @@ router.patch('/:id', async (req, res) => {
       }
     }
 
+    // Phones trusted for fingerprint sign-in were enrolled without the code: turning 2-step on revokes them
+    const turnsOnTwoFactor = changes.twoFactorEnabled === true && !user.twoFactorEnabled;
     await user.update(changes);
+    if (turnsOnTwoFactor) await revokeDevices(user.id);
     res.status(200).json(toUserResponse(user));
   } catch (error) {
     const { status, message } = describeError(error);
@@ -126,12 +130,30 @@ router.patch('/:id', async (req, res) => {
 router.post('/:id/password', async (req, res) => {
   try {
     const user = await changePassword(req.params.id, req.body);
+    await revokeDevices(user.id);
     await notifyUser(user.id, NotificationCategory.UPDATE, {
       title: 'Password changed',
       body: 'Your password was changed. If this was not you, contact the SACCO office.',
       targetType: NotificationTarget.SECURITY,
     });
     res.status(200).json({ success: true });
+  } catch (error) {
+    const { status, message } = describeError(error);
+    res.status(status).json({ error: message });
+  }
+});
+
+// After signing in with a temporary password from staff: the member's own password, and a fresh session
+// without the "must change password" mark
+router.post('/:id/password/initial', async (req, res) => {
+  try {
+    const user = await replaceTemporaryPassword(req.params.id, req.body);
+    await notifyUser(user.id, NotificationCategory.UPDATE, {
+      title: 'Password changed',
+      body: 'You replaced your temporary password. If this was not you, contact the SACCO office.',
+      targetType: NotificationTarget.SECURITY,
+    });
+    res.status(200).json(await startSession(user));
   } catch (error) {
     const { status, message } = describeError(error);
     res.status(status).json({ error: message });

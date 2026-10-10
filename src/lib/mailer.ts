@@ -212,3 +212,24 @@ export async function sendLoanCompletionEmail(loanData: {
         },
     });
 }
+
+// The temporary password staff set after a "Forgot password?" request
+export async function sendPasswordResetEmail(data: {
+    email: string;
+    name: string;
+    password: string;
+    expiresAt: Date;
+}): Promise<void> {
+    await sendEmail({
+        to: data.email,
+        subject: 'Your temporary password',
+        template: 'password-reset',
+        context: {
+            name: data.name,
+            email: data.email,
+            password: data.password,
+            expiresAt: data.expiresAt.toLocaleString('en-GB', { timeZone: 'Africa/Kampala', dateStyle: 'medium', timeStyle: 'short' }),
+            currentYear: new Date().getFullYear(),
+        },
+    });
+}

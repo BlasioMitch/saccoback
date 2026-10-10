@@ -1,51 +1,97 @@
-import jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
+
+export type ClientSource = 'WEB' | 'MOBILE' | 'SYSTEM';
+
+// Who is behind a request. The gateway verifies the member's session and forwards it as x-actor-* headers;
+// they are only trusted on requests that carry the internal API key.
+export interface Actor {
+  id: string | null;
+  email: string | null;
+  role: string | null;
+}
+
+export interface ClientInfo {
+  source: ClientSource;
+  ip: string | null;
+  userAgent: string | null;
+  // A change made offline and sent later: when it was really made
+  queuedAt: Date | null;
+  // The web page's origin (passkeys are bound to it)
+  origin: string | null;
+}
+
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Express {
+    interface Request {
+      actor?: Actor;
+      client?: ClientInfo;
+    }
+  }
+}
 
 export interface AuthenticatedRequest extends Request {
   user?: any;
 }
 
-interface JwtPayload {
-  service?: string;
-  exp: number;
-  [key: string]: any;
-}
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret';
 const INTERNAL_API_KEY = process.env.INTERNAL_API_KEY;
 
 const publicRoutes = [
   '/api/auth/login',
-  '/api/auth/token-login',
   '/health',
   '/api-docs',
 ];
 
-export const authenticateToken = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-  // Skip auth for public routes
-  if (publicRoutes.includes(req.path)) return next();
+const header = (req: Request, name: string) => {
+  const value = req.headers[name];
+  const text = Array.isArray(value) ? value[0] : value;
+  return text ? String(text).slice(0, 500) : null;
+};
 
-// console.log('Incoming graph-api-key header: ', req.headers['graph-api-key']);
+const SOURCES: Record<string, ClientSource> = { web: 'WEB', mobile: 'MOBILE' };
+
+const readActor = (req: Request): Actor => ({
+  id: header(req, 'x-actor-id'),
+  email: header(req, 'x-actor-email'),
+  role: header(req, 'x-actor-role'),
+});
+
+const readDate = (value: string | null) => {
+  const date = value ? new Date(value) : null;
+  return date && !Number.isNaN(date.getTime()) ? date : null;
+};
+
+const readClient = (req: Request): ClientInfo => ({
+  source: SOURCES[header(req, 'x-client')?.toLowerCase() ?? ''] ?? 'SYSTEM',
+  ip: header(req, 'x-client-ip'),
+  userAgent: header(req, 'x-client-ua'),
+  queuedAt: readDate(header(req, 'x-queued-at')),
+  origin: header(req, 'x-client-origin'),
+});
+
+export const authenticateToken = (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const apiKey = req.headers['graph-api-key'] as string | undefined;
 
-  // ✅ 1. Allow internal service-to-service requests with signed API key (JWT)
-  if (apiKey) {
-    try {
-
-      if (apiKey === INTERNAL_API_KEY) {
-      console.log('Internal service authenticated via API key');
-        req.user = { role: 'internal-service', service: 'graphql' };
-        return next();
-      } else {
-        console.warn('❌ Invalid API Key provided');
-        return res.status(403).json({ message: 'Invalid API key' });
-      }
-    } catch (err: any) {
-      console.warn('❌ API key verification failed:', err.message);
-      return res.status(403).json({ message: 'Invalid or expired API key' });
+  // Public routes need no key; through the gateway they still get the client details for the audit trail
+  if (publicRoutes.includes(req.path)) {
+    if (apiKey && apiKey === INTERNAL_API_KEY) {
+      req.actor = readActor(req);
+      req.client = readClient(req);
     }
+    return next();
   }
 
-  // ❌ Neither token nor valid API key present
+  // Only the GraphQL gateway holds the internal API key
+  if (apiKey) {
+    if (apiKey === INTERNAL_API_KEY) {
+      req.user = { role: 'internal-service', service: 'graphql' };
+      req.actor = readActor(req);
+      req.client = readClient(req);
+      return next();
+    }
+    console.warn('❌ Invalid API Key provided');
+    return res.status(403).json({ message: 'Invalid API key' });
+  }
+
   return res.status(401).json({ message: 'Unauthorized access' });
 };

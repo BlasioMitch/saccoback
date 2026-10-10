@@ -27,6 +27,7 @@ export const toUserResponse = (user: UserRecord) => ({
   notifyTransactions: user.notifyTransactions !== false,
   notifyUpdates: user.notifyUpdates !== false,
   notifyLoanDecisions: user.notifyLoanDecisions !== false,
+  mustChangePassword: Boolean(user.mustChangePassword),
 });
 
 // Fields PATCH /users/:id may change; who may change which ones is enforced by the gateway
@@ -37,6 +38,16 @@ export const UPDATABLE_USER_FIELDS = [
 
 export const MIN_PASSWORD_LENGTH = 8;
 
+// The rules every new password follows (own change, temporary password from staff, replacing it)
+export function validateNewPassword(password: unknown, label = 'The new password'): asserts password is string {
+  if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
+    throw new ServiceError(400, `${label} must have at least ${MIN_PASSWORD_LENGTH} characters`);
+  }
+  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+    throw new ServiceError(400, `${label} must contain letters and numbers`);
+  }
+}
+
 // Members change their own password: the current one must match
 export async function changePassword(id: string, input: Record<string, any>) {
   const { currentPassword, newPassword } = input;
@@ -45,16 +56,26 @@ export async function changePassword(id: string, input: Record<string, any>) {
   if (!currentPassword || !(await bcrypt.compare(String(currentPassword), user.password))) {
     throw new ServiceError(400, 'Your current password is not correct');
   }
-  if (typeof newPassword !== 'string' || newPassword.length < MIN_PASSWORD_LENGTH) {
-    throw new ServiceError(400, `The new password must have at least ${MIN_PASSWORD_LENGTH} characters`);
-  }
-  if (!/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) {
-    throw new ServiceError(400, 'The new password must contain letters and numbers');
-  }
+  validateNewPassword(newPassword);
   if (await bcrypt.compare(newPassword, user.password)) {
     throw new ServiceError(400, 'Choose a password different from the current one');
   }
-  await user.update({ password: await bcrypt.hash(newPassword, 10) });
+  await user.update({ password: await bcrypt.hash(newPassword, 10), mustChangePassword: false, tempPasswordExpiresAt: null });
+  return user;
+}
+
+// After signing in with a temporary password the member must choose their own (no current password asked:
+// the session itself proves they just signed in with it)
+export async function replaceTemporaryPassword(id: string, input: Record<string, any>) {
+  const { newPassword } = input;
+  const user = await models.User.findByPk(id);
+  if (!user || user.is_deleted) throw new ServiceError(404, 'User not found');
+  if (!user.mustChangePassword) throw new ServiceError(409, 'Your password does not need to be changed');
+  validateNewPassword(newPassword);
+  if (await bcrypt.compare(newPassword, user.password)) {
+    throw new ServiceError(400, 'Choose a password different from the temporary one');
+  }
+  await user.update({ password: await bcrypt.hash(newPassword, 10), mustChangePassword: false, tempPasswordExpiresAt: null });
   return user;
 }
 

@@ -1,7 +1,9 @@
 import type { Transaction as DbTransaction } from 'sequelize';
+import { Op } from 'sequelize';
 import { models } from '../models/index.js';
 import { NotificationCategory, NotificationTarget } from '../models/notification.js';
 import { TransactionStatus, TransactionType } from '../models/transaction.js';
+import { UserRole, UserStatus } from '../models/user.js';
 
 interface NotificationContent {
   title: string;
@@ -10,12 +12,13 @@ interface NotificationContent {
   targetId?: string;
 }
 
-// Each category follows one of the member's settings (mobile app > Settings > Notifications)
-const SETTING_BY_CATEGORY = {
+// Member categories follow one of the member's settings (mobile app > Settings > Notifications);
+// a category without a setting (staff requests) is always delivered
+const SETTING_BY_CATEGORY: Partial<Record<NotificationCategory, 'notifyTransactions' | 'notifyLoanDecisions' | 'notifyUpdates'>> = {
   [NotificationCategory.TRANSACTION]: 'notifyTransactions',
   [NotificationCategory.LOAN_DECISION]: 'notifyLoanDecisions',
   [NotificationCategory.UPDATE]: 'notifyUpdates',
-} as const;
+};
 
 export const formatUGX = (amount: number | string) => `UGX ${Math.round(Number(amount) || 0).toLocaleString('en-US')}`;
 
@@ -28,8 +31,9 @@ export async function notifyUser(
   transaction?: DbTransaction,
 ) {
   if (!userId) return null;
-  const user = await models.User.findByPk(userId, { transaction, attributes: ['id', SETTING_BY_CATEGORY[category]] });
-  if (!user || (user as any)[SETTING_BY_CATEGORY[category]] === false) return null;
+  const setting = SETTING_BY_CATEGORY[category];
+  const user = await models.User.findByPk(userId, { transaction, attributes: ['id', ...(setting ? [setting] : [])] });
+  if (!user || (setting && (user as any)[setting] === false)) return null;
   return models.Notification.create({
     userId,
     category,
@@ -38,6 +42,32 @@ export async function notifyUser(
     targetType: content.targetType ?? null,
     targetId: content.targetId ?? null,
   }, { transaction });
+}
+
+// Every active ADMIN and MANAGER gets the same notification (e.g. a password reset request to handle)
+export async function notifyStaff(content: NotificationContent, transaction?: DbTransaction) {
+  const staff = await models.User.findAll({
+    where: { role: [UserRole.ADMIN, UserRole.MANAGER], status: UserStatus.ACTIVE, is_deleted: { [Op.not]: true } },
+    attributes: ['id'],
+    transaction,
+  });
+  if (!staff.length) return [];
+  return models.Notification.bulkCreate(staff.map(member => ({
+    userId: member.id,
+    category: NotificationCategory.STAFF_REQUEST,
+    title: content.title,
+    body: content.body,
+    targetType: content.targetType ?? null,
+    targetId: content.targetId ?? null,
+  })), { transaction });
+}
+
+// Once one staff member has handled a request, it no longer waits in everyone else's bell
+export async function clearStaffNotifications(targetType: NotificationTarget, targetId: string, transaction?: DbTransaction) {
+  await models.Notification.update(
+    { readAt: new Date() },
+    { where: { category: NotificationCategory.STAFF_REQUEST, targetType, targetId, readAt: null }, transaction },
+  );
 }
 
 export async function notifyAccountOwner(
