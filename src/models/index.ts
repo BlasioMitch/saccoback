@@ -4,6 +4,7 @@ import Account from './account.js';
 import Transaction from './transaction.js';
 import Loan from './loan.js';
 import LoanSummary from './loanSummary.js';
+import Notification from './notification.js';
 import { defineAssociations } from './associations.js';
 
 // Initialize models
@@ -13,6 +14,7 @@ const models = {
     Transaction,
     Loan,
     LoanSummary,
+    Notification,
 };
 
 // Define associations

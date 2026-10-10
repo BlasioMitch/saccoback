@@ -34,6 +34,10 @@ interface UserAttributes {
   dob: Date;
   hasAccount?: boolean;
   avatar?: string | null;
+  twoFactorEnabled?: boolean;
+  notifyTransactions?: boolean;
+  notifyUpdates?: boolean;
+  notifyLoanDecisions?: boolean;
   is_deleted?: boolean;
   deleted_at?: Date;
 }
@@ -54,6 +58,10 @@ class User extends BaseModel<UserAttributes> implements UserAttributes {
   public other_name!: string;
   public hasAccount?: boolean ;
   public avatar?: string | null;
+  public twoFactorEnabled?: boolean;
+  public notifyTransactions?: boolean;
+  public notifyUpdates?: boolean;
+  public notifyLoanDecisions?: boolean;
   public is_deleted?: boolean;
   public deleted_at?: Date | undefined;
   public getFullName(): string {
@@ -123,6 +131,27 @@ User.init(
       type: DataTypes.TEXT,
       allowNull: true,
       defaultValue: null,
+    },
+    // Member settings (mobile app): sign-in code step, and which notifications to receive
+    twoFactorEnabled: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    notifyTransactions: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+    notifyUpdates: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+    notifyLoanDecisions: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
     },
     hasAccount: {
       type: DataTypes.BOOLEAN,

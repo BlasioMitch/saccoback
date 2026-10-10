@@ -7,6 +7,7 @@ import sequelize from '../../lib/sequelize.js';
 import { bulkHandler } from '../../lib/bulk.js';
 import { createTransaction } from '../../services/transactions.js';
 import { describeError } from '../../services/errors.js';
+import { notifyTransaction } from '../../lib/notifications.js';
 
 const router = Router();
 
@@ -87,7 +88,7 @@ router.patch('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Transaction not found' });
     }
 
-    const previous = { type: transaction.type, loanId: transaction.loanId };
+    const previous = { type: transaction.type, loanId: transaction.loanId, status: transaction.status };
 
     // Only fields that were sent; undefined would otherwise overwrite stored values
     const changes = Object.fromEntries(
@@ -101,6 +102,10 @@ router.patch('/:id', async (req, res) => {
     if (transaction.type === 'LOAN_PAYMENT' && transaction.loanId) affectedLoans.add(transaction.loanId);
     for (const affectedLoanId of affectedLoans) {
       await recalculateLoanSummary(affectedLoanId);
+    }
+    // e.g. a pending deposit confirmed by staff
+    if (transaction.status !== previous.status) {
+      await notifyTransaction(transaction, undefined, { statusChanged: true });
     }
 
     // Return updated transaction

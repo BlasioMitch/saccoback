@@ -6,7 +6,7 @@ import { sendLoanCreationEmail, sendLoanCompletionEmail } from '../../lib/mailer
 import { moneyFieldError } from '../../lib/money.js';
 import { bulkHandler } from '../../lib/bulk.js';
 import { applyForLoan, approveLoan, createLoan, rejectLoan } from '../../services/loans.js';
-import { APPLICATION_STATUSES } from '../../models/loan.js';
+import { APPLICATION_STATUSES, LoanStatus } from '../../models/loan.js';
 import { Op } from 'sequelize';
 import { describeError } from '../../services/errors.js';
 import { payLoanFromSavings } from '../../services/transactions.js';
@@ -52,6 +52,34 @@ router.get('/', async (req, res) => {
 });
 
 // Get a lona summary
+// Member applications by outcome. An approved application keeps its decidedAt, which is how it is told
+// apart from loans staff create directly in the loan book.
+// ?view=PENDING | APPROVED | REJECTED | ALL (default PENDING)
+const APPLICATION_VIEWS: Record<string, any> = {
+  PENDING: { status: LoanStatus.PENDING },
+  REJECTED: { status: LoanStatus.REJECTED },
+  APPROVED: { status: { [Op.notIn]: [...APPLICATION_STATUSES] }, decidedAt: { [Op.ne]: null } },
+  ALL: { [Op.or]: [{ status: LoanStatus.PENDING }, { decidedAt: { [Op.ne]: null } }] },
+};
+
+router.get('/applications', async (req, res) => {
+  const view = String(req.query.view || 'PENDING').toUpperCase();
+  if (!APPLICATION_VIEWS[view]) {
+    return res.status(400).json({ error: `view must be one of ${Object.keys(APPLICATION_VIEWS).join(', ')}` });
+  }
+  try {
+    const loans = await models.Loan.findAll({
+      where: APPLICATION_VIEWS[view],
+      include: [{ model: models.LoanSummary, as: 'summary' }],
+      order: [['createdAt', 'DESC']],
+    });
+    res.status(200).json(loans);
+  } catch (error) {
+    const { status, message } = describeError(error);
+    res.status(status).json({ error: message });
+  }
+});
+
 router.get('/:id/summary', async (req, res) => {
   const { id } = req.params;
   try {

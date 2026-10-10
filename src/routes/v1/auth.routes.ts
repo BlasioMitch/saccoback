@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { models } from '../../models/index.js';
+import { toUserResponse } from '../../services/users.js';
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'my-secret-key';
@@ -59,7 +60,7 @@ router.post('/login', async (req, res) => {
 
     // Return user data and token
     res.json({
-      user: user,
+      user: toUserResponse(user),
       token,
     });
   } catch (error) {
@@ -69,7 +70,7 @@ router.post('/login', async (req, res) => {
 });
 
 // Logout
-router.post('/logout', (req: SessionRequest, res: Response) => {
+router.post('/logout', (_req: SessionRequest, res: Response) => {
 //  TODO: Implement session management
   // if (!req.session) {
   //   return res.status(400).json({ error: 'Session not found' });

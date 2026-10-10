@@ -5,6 +5,7 @@ import { OPEN_LOAN_STATUSES } from '../models/loan.js';
 import { recalculateLoanSummary } from '../lib/loans.js';
 import { moneyFieldError } from '../lib/money.js';
 import { ServiceError } from './errors.js';
+import { notifyTransaction } from '../lib/notifications.js';
 
 // Allow for small clock differences between the browser and the server
 const CLOCK_SKEW_MS = 5 * 60 * 1000;
@@ -66,6 +67,9 @@ export async function createTransaction(input: Record<string, any>, { transactio
   } else if (type === TransactionType.MEMBERSHIP_FEE) {
     await account.update({ balance: balance - Number(amount), paidMembership: true }, { transaction });
   }
+
+  // Bulk imports load history: only live transactions notify the member
+  if (!allowBackdate) await notifyTransaction(newTransaction, transaction);
 
   return { transaction: newTransaction, account };
 }

@@ -6,6 +6,8 @@ import { ServiceError } from './errors.js';
 import { LoanStatus } from '../models/loan.js';
 import { AccountStatus } from '../models/account.js';
 import { DEFAULT_LOAN_RATE } from '../lib/settings.js';
+import { formatUGX, notifyAccountOwner } from '../lib/notifications.js';
+import { NotificationCategory, NotificationTarget } from '../models/notification.js';
 
 export async function createLoan(input: Record<string, any>, { transaction }: { transaction?: DbTransaction } = {}) {
   const { accountId, amount, interestRate, term, status, startDate, endDate } = input;
@@ -47,6 +49,23 @@ const addMonths = (date: Date, months: number) => {
   return result;
 };
 
+// Calendar date in Kampala (UTC+3), as YYYY-MM-DD
+const kampalaDate = (date = new Date()) => new Date(date.getTime() + 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+const MAX_START_DAYS_AHEAD = 92;
+
+// The member's proposed start date: today up to about three months ahead (defaults to today)
+const proposedStartDate = (value: unknown) => {
+  if (value == null || value === '') return new Date(`${kampalaDate()}T00:00:00Z`);
+  const text = String(value).slice(0, 10);
+  const date = new Date(`${text}T00:00:00Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || Number.isNaN(date.getTime())) throw new ServiceError(400, 'Invalid start date');
+  if (text < kampalaDate()) throw new ServiceError(400, 'The start date cannot be in the past');
+  if (text > kampalaDate(new Date(Date.now() + MAX_START_DAYS_AHEAD * 24 * 60 * 60 * 1000))) {
+    throw new ServiceError(400, 'Choose a start date within the next 3 months');
+  }
+  return date;
+};
+
 // A member applies from the app; the loan waits as PENDING until a manager decides
 export async function applyForLoan(userId: string, input: Record<string, any>, { transaction }: { transaction?: DbTransaction } = {}) {
   const { amount, term, purpose } = input;
@@ -67,7 +86,7 @@ export async function applyForLoan(userId: string, input: Record<string, any>, {
   const pending = await models.Loan.count({ where: { accountId: account.id, status: LoanStatus.PENDING }, transaction });
   if (pending) throw new ServiceError(409, 'You already have a loan application waiting for approval');
 
-  const startDate = new Date();
+  const startDate = proposedStartDate(input.startDate);
   const loan = await models.Loan.create({
     accountId: account.id,
     amount,
@@ -81,6 +100,12 @@ export async function applyForLoan(userId: string, input: Record<string, any>, {
 
   // Estimated repayments at the default rate (does not mark the account as having a loan)
   await recalculateLoanSummary(loan.id, transaction);
+  await notifyAccountOwner(account.id, NotificationCategory.UPDATE, {
+    title: 'Loan application received',
+    body: `Your application for ${formatUGX(amount)} over ${Number(term)} months is waiting for approval.`,
+    targetType: NotificationTarget.LOAN,
+    targetId: loan.id,
+  }, transaction);
   return loan;
 }
 
@@ -91,7 +116,7 @@ const findPendingLoan = async (id: string, transaction?: DbTransaction) => {
   return loan;
 };
 
-// Manager approval: confirm (or change) the rate and start date; repayments start from there
+// Manager approval: confirm (or change) the rate and start date (defaults to the member's proposed date)
 export async function approveLoan(id: string, input: Record<string, any>, { transaction }: { transaction?: DbTransaction } = {}) {
   const loan = await findPendingLoan(id, transaction);
   const account = await models.Account.findByPk(loan.accountId, { transaction });
@@ -100,7 +125,7 @@ export async function approveLoan(id: string, input: Record<string, any>, { tran
 
   const interestRate = input.interestRate ?? loan.interestRate;
   if (!(Number(interestRate) > 0 && Number(interestRate) <= 100)) throw new ServiceError(400, 'Interest rate must be between 0 and 100');
-  const startDate = input.startDate ? new Date(input.startDate) : new Date();
+  const startDate = input.startDate ? new Date(input.startDate) : new Date(loan.startDate);
   if (Number.isNaN(startDate.getTime())) throw new ServiceError(400, 'Invalid start date');
 
   await loan.update({
@@ -111,7 +136,14 @@ export async function approveLoan(id: string, input: Record<string, any>, { tran
     decisionNote: input.note ? String(input.note).trim() : null,
     decidedAt: new Date(),
   }, { transaction });
-  await recalculateLoanSummary(loan.id, transaction);
+  const recalculated = await recalculateLoanSummary(loan.id, transaction);
+  await notifyAccountOwner(loan.accountId, NotificationCategory.LOAN_DECISION, {
+    title: 'Loan approved',
+    body: `Your loan of ${formatUGX(loan.amount)} was approved at ${Number(interestRate)}%. `
+      + `Monthly payment ${formatUGX(recalculated?.summary.monthlyPayment ?? 0)}.`,
+    targetType: NotificationTarget.LOAN,
+    targetId: loan.id,
+  }, transaction);
   return loan;
 }
 
@@ -120,5 +152,11 @@ export async function rejectLoan(id: string, input: Record<string, any>, { trans
   if (!reason) throw new ServiceError(400, 'Give the member a reason for the rejection');
   const loan = await findPendingLoan(id, transaction);
   await loan.update({ status: LoanStatus.REJECTED, decisionNote: reason, decidedAt: new Date() }, { transaction });
+  await notifyAccountOwner(loan.accountId, NotificationCategory.LOAN_DECISION, {
+    title: 'Loan application declined',
+    body: `Your application for ${formatUGX(loan.amount)} was declined: ${reason}`,
+    targetType: NotificationTarget.LOAN,
+    targetId: loan.id,
+  }, transaction);
   return loan;
 }
