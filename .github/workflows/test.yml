@@ -33,3 +33,5 @@ jobs:
       - run: npm ci
       - run: npx tsc --noEmit
       - run: npm test
+      # The production build (what Render runs): app only, no tests
+      - run: npm run build
