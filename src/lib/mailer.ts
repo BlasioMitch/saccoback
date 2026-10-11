@@ -41,8 +41,15 @@ interface EmailOptions {
     }>;
 }
 
+// Tests: emails are kept here instead of being sent (NODE_ENV=test), so a test can read e.g. a temporary password
+export const testOutbox: Array<Pick<EmailOptions, 'to' | 'subject' | 'template' | 'context'>> = [];
+
 // Main email sending function
 export async function sendEmail(options: EmailOptions): Promise<void> {
+    if (process.env.NODE_ENV === 'test') {
+        testOutbox.push({ to: options.to, subject: options.subject, template: options.template, context: options.context });
+        return;
+    }
     try {
         let attachments = options.attachments || [];
 
