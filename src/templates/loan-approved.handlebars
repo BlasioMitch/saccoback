@@ -1,0 +1,6 @@
+<p style="margin:0 0 16px 0;">Dear {{name}},</p>
+<p style="margin:0 0 8px 0;">Good news: your loan has been approved.</p>
+{{> amount label="Loan amount" value=amount chip="Approved" note=summaryLine}}
+{{> details}}
+{{#if note}}<p style="margin:0 0 16px 0;"><strong>Note from the SACCO:</strong> {{note}}</p>{{/if}}
+<p style="margin:0 0 16px 0;">Your loan statement, with the full repayment plan, is attached. You can follow your loan and make payments from your savings in the Green Sprout app.</p>

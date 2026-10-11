@@ -1,13 +1,21 @@
 import nodemailer from 'nodemailer';
 import hbs from 'nodemailer-express-handlebars';
 import path from 'path';
-import fs from 'fs';
 import exphbs from 'express-handlebars';
-import { generateTransactionPDF, generateAccountPDF } from './pdfGenerator.js';
-import { TransactionType, TransactionStatus } from '../models/transaction.js';
+import {
+    accountConfirmation, AccountConfirmationData, loanClearedCertificate, LoanClearedData, loanStatement, LoanStatementData,
+    ReceiptData, transactionReceipt,
+} from './pdfGenerator.js';
+import { formatUGX, kampalaDate, kampalaDateTime, reference, typeLabel } from './brandPdf.js';
+import { addMonths } from './loanSchedule.js';
 
+// Member emails: one branded layout (templates/layouts/email.handlebars) with the logo inline, each with its
+// document attached as a PDF built in memory.
+// EMAIL_REDIRECT_TO sends every email to that address instead (development), so testing never reaches members.
 
-// Configure email transporter
+const TEMPLATES = path.resolve('./src/templates');
+const LOGO = path.join(TEMPLATES, 'assets/gs-logo.png');
+
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
@@ -16,217 +24,200 @@ const transporter = nodemailer.createTransport({
     },
 });
 
-// Configure handlebars for email templates
-const handlebarOptions = {
-    viewEngine: exphbs.create({
-        extname: '.handlebars',
-        partialsDir: path.resolve('./src/templates/'),
-        defaultLayout: false,
-    }),
-    viewPath: path.resolve('./src/templates/'),
-    extName: '.handlebars',
-};
+const engine = exphbs.create({
+    extname: '.handlebars',
+    layoutsDir: path.join(TEMPLATES, 'layouts'),
+    partialsDir: path.join(TEMPLATES, 'partials'),
+    defaultLayout: 'email',
+});
 
-transporter.use('compile', hbs(handlebarOptions));
+transporter.use('compile', hbs({ viewEngine: engine, viewPath: TEMPLATES, extName: '.handlebars' }));
 
-// Interface for email options
+interface Attachment {
+    filename: string;
+    content: Buffer;
+    contentType: string;
+}
+
 interface EmailOptions {
     to: string;
     subject: string;
     template: string;
     context: Record<string, any>;
-    attachments?: Array<{
-        filename: string;
-        path: string;
-    }>;
+    attachments?: Attachment[];
 }
 
-// Tests: emails are kept here instead of being sent (NODE_ENV=test), so a test can read e.g. a temporary password
-export const testOutbox: Array<Pick<EmailOptions, 'to' | 'subject' | 'template' | 'context'>> = [];
+// The HTML an email will have (also used by tests and the preview script)
+export const renderEmail = (template: string, context: Record<string, any>): Promise<string> =>
+    engine.renderView(path.join(TEMPLATES, `${template}.handlebars`), { ...context, layout: 'email' });
 
-// Main email sending function
+// Tests: emails are kept here instead of being sent (NODE_ENV=test), rendered, with their attachments listed
+export const testOutbox: Array<Pick<EmailOptions, 'to' | 'subject' | 'template' | 'context'> & {
+    html: string;
+    attachments: Array<{ filename: string; contentType: string; size: number; content: Buffer }>;
+}> = [];
+
+export const recipientFor = (email: string) => process.env.EMAIL_REDIRECT_TO?.trim() || email;
+
 export async function sendEmail(options: EmailOptions): Promise<void> {
+    const to = recipientFor(options.to);
+    const context = { currentYear: new Date().getFullYear(), title: options.subject, ...options.context };
+    const attachments = options.attachments ?? [];
+
     if (process.env.NODE_ENV === 'test') {
-        testOutbox.push({ to: options.to, subject: options.subject, template: options.template, context: options.context });
+        testOutbox.push({
+            to, subject: options.subject, template: options.template, context,
+            html: await renderEmail(options.template, context),
+            attachments: attachments.map(({ filename, contentType, content }) => ({ filename, contentType, size: content.length, content })),
+        });
         return;
     }
-    try {
-        let attachments = options.attachments || [];
+    if (to !== options.to) console.log(`Email for ${options.to} sent to ${to} (EMAIL_REDIRECT_TO)`);
 
-        // Generate PDF if needed
-        if (options.template === 'transaction') {
-            const transactionContext = options.context as {
-                transactionId: string;
-                accountNumber: string;
-                type: TransactionType;
-                amount: number;
-                status: TransactionStatus;
-                date: string;
-                name: string;
-            };
-            const pdfPath = await generateTransactionPDF(transactionContext);
-            attachments.push({
-                filename: `transaction_receipt_${Date.now()}.pdf`,
-                path: pdfPath,
-            });
-        } else if (options.template === 'account-creation') {
-            const accountContext = options.context as {
-                accountId: string;
-                name: string;
-                email: string;
-            };
-            const pdfPath = await generateAccountPDF(accountContext);
-            attachments.push({
-                filename: `account_confirmation_${Date.now()}.pdf`,
-                path: pdfPath,
-            });
-        }
-
-        const mailOptions = {
-            from: process.env.EMAIL_USER || 'ts.gmail.com',
-            to: options.to,
-            subject: options.subject,
-            template: options.template,
-            context: options.context,
-            attachments,
-        };
-
-        await transporter.sendMail(mailOptions);
-
-        // Clean up temporary PDF files
-        attachments.forEach(attachment => {
-            if (attachment.path.includes('/temp/')) {
-                fs.unlinkSync(attachment.path);
-            }
-        });
-    } catch (error) {
-        console.error('Error sending email:', error);
-        throw error;
-    }
+    await transporter.sendMail({
+        from: `"Green Sprout SACCO" <${process.env.EMAIL_USER || 'ts.gmail.com'}>`,
+        to,
+        subject: options.subject,
+        template: options.template,
+        context,
+        attachments: [{ filename: 'gs-logo.png', path: LOGO, cid: 'gs-logo' }, ...attachments],
+    } as any);
 }
 
-// Example usage functions
-export async function sendAccountCreationEmail(userData: {
-    email: string;
-    name: string;
-    accountId: string;
-}): Promise<void> {
+// Emails go out after the change is saved and never fail the request that caused them
+export const sendInBackground = (what: string, send: Promise<void>) => {
+    send.catch(error => console.error(`Could not send the ${what} email:`, error));
+};
+
+const pdf = (filename: string, content: Buffer): Attachment => ({ filename, content, contentType: 'application/pdf' });
+
+// A member was registered (their savings account comes later)
+export async function sendWelcomeEmail(member: { email: string; name: string; joinedAt?: Date | string }) {
     await sendEmail({
-        to: userData.email,
-        subject: 'Welcome to Our Platform',
+        to: member.email,
+        subject: 'Welcome to Green Sprout SACCO',
+        template: 'welcome',
+        context: {
+            name: member.name,
+            preheader: 'You are now a registered member of Green Sprout SACCO.',
+            details: [
+                { label: 'Member', value: member.name },
+                { label: 'Sign-in email', value: member.email },
+                { label: 'Joined', value: kampalaDate(member.joinedAt ?? new Date()) },
+            ],
+        },
+    });
+}
+
+export async function sendAccountCreationEmail(data: AccountConfirmationData) {
+    await sendEmail({
+        to: data.email,
+        subject: `Your account ${data.accountNumber} is open`,
         template: 'account-creation',
         context: {
-            name: userData.name,
-            accountId: userData.accountId,
-            email: userData.email,
+            name: data.memberName,
+            accountNumber: data.accountNumber,
+            preheader: `Account ${data.accountNumber} is open and ready to use.`,
+            details: [
+                { label: 'Account number', value: data.accountNumber },
+                { label: 'Opened on', value: kampalaDate(data.openedAt) },
+                { label: 'Opening deposit', value: formatUGX(data.openingDeposit ?? 0) },
+                { label: 'Membership fee', value: data.membershipFeePaid ? 'Paid' : 'Not paid yet' },
+            ],
         },
+        attachments: [pdf(`Account-confirmation-${data.accountNumber}.pdf`, await accountConfirmation(data))],
     });
 }
 
-export async function sendTransactionEmail(transactionData: {
-    email: string;
-    name: string;
-    transactionId: string;
-    accountNumber: string;
-    type: TransactionType;
-    amount: number;
-    status: TransactionStatus;
-    date: string;
-}): Promise<void> {
+const INTRO: Record<string, string> = {
+    SAVINGS_DEPOSIT: 'A deposit has been added to your savings.',
+    ACCOUNT_WITHDRAW: 'A withdrawal has been made from your savings.',
+    CLOSURE_WITHDRAW: 'Your account closure payout has been recorded.',
+    MEMBERSHIP_FEE: 'Your membership fee has been paid from your savings. You are now eligible for loans.',
+    LOAN_PAYMENT: 'A repayment has been recorded on your loan.',
+};
+const STATUS_COLOR: Record<string, string> = { COMPLETED: '#1F6B29', PENDING: '#8A5A00', FAILED: '#B42318' };
+
+export async function sendTransactionEmail(data: ReceiptData & { email: string }) {
+    const ref = reference('TX', data.transactionId);
+    const status = data.status.charAt(0) + data.status.slice(1).toLowerCase();
     await sendEmail({
-        to: transactionData.email,
-        subject: 'Transaction Confirmation',
+        to: data.email,
+        subject: `${typeLabel(data.type)} of ${formatUGX(data.amount)} · receipt ${ref}`,
         template: 'transaction',
         context: {
-            name: transactionData.name,
-            transactionId: transactionData.transactionId,
-            accountNumber: transactionData.accountNumber,
-            type: transactionData.type,
-            amount: transactionData.amount,
-            status: transactionData.status,
-            date: transactionData.date,
+            name: data.memberName,
+            intro: data.status === 'COMPLETED' ? INTRO[data.type] ?? 'A transaction has been recorded on your account.' : `This transaction is ${status.toLowerCase()}.`,
+            typeLabel: typeLabel(data.type),
+            amount: formatUGX(data.amount),
+            statusLabel: status,
+            statusColor: STATUS_COLOR[data.status] ?? '#1F6B29',
+            preheader: `${typeLabel(data.type)} of ${formatUGX(data.amount)} on account ${data.accountNumber}.`,
+            details: [
+                { label: 'Receipt number', value: ref },
+                { label: 'Account number', value: data.accountNumber },
+                { label: 'Date and time', value: kampalaDateTime(data.date) },
+                ...(data.loanRemaining != null ? [{ label: 'Still owed on the loan', value: formatUGX(data.loanRemaining) }] : []),
+                ...(data.balanceAfter != null && data.type !== 'LOAN_PAYMENT' ? [{ label: 'Savings balance', value: formatUGX(data.balanceAfter) }] : []),
+            ],
         },
+        attachments: [pdf(`Receipt-${ref}.pdf`, await transactionReceipt(data))],
     });
 }
 
-export async function sendLoanCreationEmail(loanData: {
-    email: string;
-    name: string;
-    loanId: string;
-    accountNumber: string;
-    loanAmount: number;
-    interestRate: number;
-    term: number;
-    monthlyPayment: number;
-    totalInterest: number;
-    totalAmount: number;
-}): Promise<void> {
+export async function sendLoanApprovedEmail(data: LoanStatementData & { email: string }) {
+    const ref = reference('LN', data.loanId);
+    const totalDue = Number(data.amount) + Number(data.totalInterest);
     await sendEmail({
-        to: loanData.email,
-        subject: 'Loan Approval Notification',
-        template: 'loan-creation',
+        to: data.email,
+        subject: `Your loan of ${formatUGX(data.amount)} is approved`,
+        template: 'loan-approved',
         context: {
-            name: loanData.name,
-            loanId: loanData.loanId,
-            accountNumber: loanData.accountNumber,
-            loanAmount: loanData.loanAmount.toLocaleString(),
-            interestRate: loanData.interestRate,
-            term: loanData.term,
-            monthlyPayment: loanData.monthlyPayment.toLocaleString(),
-            totalInterest: loanData.totalInterest.toLocaleString(),
-            totalAmount: loanData.totalAmount.toLocaleString(),
-            currentYear: new Date().getFullYear()
+            name: data.memberName,
+            amount: formatUGX(data.amount),
+            note: data.note,
+            summaryLine: `${data.term} monthly payments of about ${formatUGX(data.monthlyPayment)}`,
+            preheader: `Loan ${ref}: ${formatUGX(data.amount)} over ${data.term} months.`,
+            details: [
+                { label: 'Loan reference', value: ref },
+                { label: 'Interest rate', value: `${Number(data.interestRate)}%` },
+                { label: 'Repayment period', value: `${data.term} month${data.term === 1 ? '' : 's'}` },
+                { label: 'Monthly payment', value: formatUGX(data.monthlyPayment) },
+                { label: 'Total interest', value: formatUGX(data.totalInterest) },
+                { label: 'Total to repay', value: formatUGX(totalDue) },
+                { label: 'First payment due', value: kampalaDate(addMonths(new Date(data.startDate), 1)) },
+                { label: 'Last payment due', value: kampalaDate(data.endDate) },
+            ],
         },
+        attachments: [pdf(`Loan-statement-${ref}.pdf`, await loanStatement(data))],
     });
 }
 
-export async function sendLoanCompletionEmail(loanData: {
-    email: string;
-    name: string;
-    loanId: string;
-    accountNumber: string;
-    loanAmount: number;
-    interestRate: number;
-    term: number;
-    totalInterest: number;
-    totalAmount: number;
-    completionDate: string;
-    transactions: Array<{
-        date: string;
-        amount: number;
-        type: string;
-    }>;
-}): Promise<void> {
+export async function sendLoanClearedEmail(data: LoanClearedData & { email: string }) {
+    const ref = reference('LN', data.loanId);
+    const totalRepaid = data.payments.reduce((sum, payment) => sum + Number(payment.amount), 0);
     await sendEmail({
-        to: loanData.email,
-        subject: 'Loan Completion Notification',
-        template: 'loan-completion',
+        to: data.email,
+        subject: `Loan ${ref} is fully repaid`,
+        template: 'loan-cleared',
         context: {
-            name: loanData.name,
-            loanId: loanData.loanId,
-            accountNumber: loanData.accountNumber,
-            loanAmount: loanData.loanAmount.toLocaleString(),
-            interestRate: loanData.interestRate,
-            term: loanData.term,
-            totalInterest: loanData.totalInterest.toLocaleString(),
-            totalAmount: loanData.totalAmount.toLocaleString(),
-            completionDate: loanData.completionDate,
-            transactions: loanData.transactions.map(t => ({
-                ...t,
-                amount: t.amount.toLocaleString()
-            })),
-            currentYear: new Date().getFullYear()
+            name: data.memberName,
+            totalRepaid: formatUGX(totalRepaid),
+            preheader: `Congratulations, loan ${ref} is cleared.`,
+            details: [
+                { label: 'Loan reference', value: ref },
+                { label: 'Amount borrowed', value: formatUGX(data.amount) },
+                { label: 'Interest', value: formatUGX(data.totalInterest) },
+                { label: 'Repayments', value: String(data.payments.length) },
+                { label: 'Cleared on', value: kampalaDate(data.clearedAt) },
+            ],
         },
+        attachments: [pdf(`Loan-cleared-${ref}.pdf`, await loanClearedCertificate(data))],
     });
 }
 
 // The temporary password staff set after a "Forgot password?" request
-export async function sendPasswordResetEmail(data: {
-    email: string;
-    name: string;
-    password: string;
-    expiresAt: Date;
-}): Promise<void> {
+export async function sendPasswordResetEmail(data: { email: string; name: string; password: string; expiresAt: Date }) {
     await sendEmail({
         to: data.email,
         subject: 'Your temporary password',
@@ -236,7 +227,7 @@ export async function sendPasswordResetEmail(data: {
             email: data.email,
             password: data.password,
             expiresAt: data.expiresAt.toLocaleString('en-GB', { timeZone: 'Africa/Kampala', dateStyle: 'medium', timeStyle: 'short' }),
-            currentYear: new Date().getFullYear(),
+            preheader: 'Sign in with this temporary password and choose your own.',
         },
     });
 }

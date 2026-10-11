@@ -37,6 +37,9 @@ RUN --mount=type=cache,target=/root/.npm \
 
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
+# Email templates (with the logo) and the brand mark for PDFs are read from src/ at runtime
+COPY --from=builder /app/src/templates ./src/templates
+COPY --from=builder /app/src/assets ./src/assets
 
 # Create dist directory with proper permissions (if needed)
 # RUN chown -R node:node /usr/src/app

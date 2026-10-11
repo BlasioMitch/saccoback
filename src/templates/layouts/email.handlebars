@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light only">
+  <title>{{title}}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#EEF4EC;-webkit-text-size-adjust:100%;">
+  {{!-- Shown by inboxes next to the subject, hidden in the email itself --}}
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#EEF4EC;font-size:1px;line-height:1px;">{{preheader}}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#EEF4EC;">
+    <tr>
+      <td align="center" style="padding:28px 12px;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background-color:#FFFFFF;border:1px solid #DCE7D9;border-radius:16px;overflow:hidden;">
+          <tr>
+            <td style="background-color:#012203;padding:28px 32px 24px 32px;">
+              <img src="cid:gs-logo" width="132" height="117" alt="Green Sprout SACCO" style="display:block;border:0;outline:none;text-decoration:none;width:132px;height:auto;">
+              <h1 style="margin:20px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:1.3;font-weight:bold;color:#FFFFFF;">{{title}}</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="height:4px;line-height:4px;font-size:4px;background-color:#70AF3E;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td style="padding:28px 32px 8px 32px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#0E2112;">
+              {{{body}}}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 32px 28px 32px;border-top:1px solid #E6EEE4;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.6;color:#5B6B5D;">
+              <strong style="color:#012203;">Green Sprout SACCO</strong> · Savings and credit cooperative<br>
+              This is an automated message; replies are not read. Questions? Contact the SACCO office.<br>
+              &copy; {{currentYear}} Green Sprout SACCO
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

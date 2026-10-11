@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { models } from '../../models/index.js';
 import { generateUniqueAccountNumber } from '../../lib/utils.js';
 import { TransactionStatus, TransactionType } from '../../models/transaction.js';
-import { sendAccountCreationEmail } from '../../lib/mailer.js';
+import { sendAccountCreationEmail, sendInBackground } from '../../lib/mailer.js';
 import { moneyFieldError } from '../../lib/money.js';
 
 const router = Router();
@@ -93,18 +93,15 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Send account creation email
-    try {
-      await sendAccountCreationEmail({
-        // email: user.email,
-        email: 'blaminsi@gmail.com',
-        name: user.getFullName(),
-        accountId: accountNumber
-      });
-    } catch (emailError) {
-      console.error('Error sending account creation email:', emailError);
-      // Don't fail the request if email fails
-    }
+    sendInBackground('account opened', sendAccountCreationEmail({
+      email: user.email,
+      memberName: user.getFullName(),
+      contact: user.contact,
+      accountNumber,
+      openedAt: newAccount.createdAt,
+      openingDeposit: Number(balance) || 0,
+      membershipFeePaid: Boolean(paidMembership),
+    }));
 
     // Return created account with user details
     const fullAccount = await models.Account.findByPk(newAccount.id, {

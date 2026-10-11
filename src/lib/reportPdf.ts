@@ -1,7 +1,7 @@
-import PDFDocument from 'pdfkit';
 import type { Writable } from 'stream';
+import { brandHeader, COLORS, footer, newDocument } from './brandPdf.js';
 
-// Printable reports: a title block, then tables (amounts in whole UGX, right-aligned)
+// Printable reports: the brand header, then tables (amounts in whole UGX, right-aligned)
 
 interface Column {
   label: string;
@@ -25,25 +25,22 @@ interface ReportDocument {
   notes?: string[];
 }
 
-const BRAND = '#2f6b2f';
-const MUTED = '#666666';
-const RULE = '#d9d9d9';
+const BRAND = COLORS.accent;
+const MUTED = COLORS.muted;
+const RULE = COLORS.rule;
 const ROW_HEIGHT = 16;
 
 export const money = (value: number | null | undefined) => Math.round(Number(value) || 0).toLocaleString('en-US');
 const day = (value: string | Date) => new Date(value).toLocaleDateString('en-GB', { timeZone: 'Africa/Kampala', day: '2-digit', month: 'short', year: 'numeric' });
 
 export function writeReportPdf(output: Writable, report: ReportDocument) {
-  const doc = new PDFDocument({ size: 'A4', layout: report.landscape ? 'landscape' : 'portrait', margin: 40, bufferPages: true });
+  const doc = newDocument({ landscape: report.landscape });
   doc.pipe(output);
   const left = doc.page.margins.left;
   const width = doc.page.width - doc.page.margins.left - doc.page.margins.right;
   const bottom = () => doc.page.height - doc.page.margins.bottom - 20;
 
-  doc.fillColor(BRAND).font('Helvetica-Bold').fontSize(18).text('Green Sprout SACCO', left, doc.y);
-  doc.fillColor('#000').fontSize(14).text(report.title);
-  doc.fillColor(MUTED).font('Helvetica').fontSize(10).text(`${report.subtitle} · Amounts in UGX`);
-  doc.moveDown(0.8);
+  brandHeader(doc, { title: report.title, reference: report.subtitle, subtitle: 'Amounts in UGX' });
 
   if (report.summary?.length) {
     for (const [label, value] of report.summary) {
@@ -95,20 +92,7 @@ export function writeReportPdf(output: Writable, report: ReportDocument) {
     for (const note of report.notes) doc.text(note, left, doc.y, { width });
   }
 
-  // Footer on every page
-  const generated = new Date().toLocaleString('en-GB', { timeZone: 'Africa/Kampala', dateStyle: 'medium', timeStyle: 'short' });
-  const range = doc.bufferedPageRange();
-  for (let index = range.start; index < range.start + range.count; index += 1) {
-    doc.switchToPage(index);
-    // Writing inside the bottom margin would otherwise start a new page
-    const margin = doc.page.margins.bottom;
-    doc.page.margins.bottom = 0;
-    const y = doc.page.height - margin + 12;
-    doc.fillColor(MUTED).font('Helvetica').fontSize(8);
-    doc.text(`Generated ${generated}`, left, y, { width: width / 2, lineBreak: false });
-    doc.text(`Page ${index + 1} of ${range.count}`, left + width / 2, y, { width: width / 2, align: 'right', lineBreak: false });
-    doc.page.margins.bottom = margin;
-  }
+  footer(doc, `Green Sprout SACCO · ${report.title} · ${report.subtitle}`);
   doc.end();
 }
 

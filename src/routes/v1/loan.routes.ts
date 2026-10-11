@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { models } from '../../models/index.js';
 import { recalculateLoanSummary } from '../../lib/loans.js';
 import sequelize from '../../lib/sequelize.js';
-import { sendLoanCreationEmail, sendLoanCompletionEmail } from '../../lib/mailer.js';
+import { emailLoanApproved, emailLoanCleared, emailReceipt } from '../../lib/memberEmails.js';
 import { moneyFieldError } from '../../lib/money.js';
 import { bulkHandler } from '../../lib/bulk.js';
 import { applyForLoan, approveLoan, createLoan, rejectLoan } from '../../services/loans.js';
@@ -104,33 +104,11 @@ router.get('/:id/summary', async (req, res) => {
 // Create loan
 router.post('/', async (req, res) => {
   try {
-    const { loan: newLoan, account, monthlyPayment, totalInterest } = await sequelize.transaction(
+    const { loan: newLoan } = await sequelize.transaction(
       (transaction) => createLoan(req.body, { transaction })
     );
-    const { amount, interestRate, term } = req.body;
-
-    // Send loan creation email
-    try {
-      const owner = (account as any).owner;
-      if (owner && owner.email) {
-        await sendLoanCreationEmail({
-          // email: owner.email,
-          email: 'blaminsi@gmail.com',
-          name: `${owner.first_name} ${owner.last_name}`,
-          loanId: newLoan.id,
-          accountNumber: account.accountNumber,
-          loanAmount: amount,
-          interestRate: interestRate,
-          term: term,
-          monthlyPayment: monthlyPayment,
-          totalInterest: totalInterest,
-          totalAmount: Number(amount) + Number(totalInterest),
-        });
-      }
-    } catch (emailError) {
-      console.error('Error sending loan creation email:', emailError);
-      // Don't fail the request if email fails
-    }
+    // The statement (terms and repayment plan) goes to the member
+    emailLoanApproved(newLoan.id);
 
     // Return created loan with account details and loan summary
     const loan = await models.Loan.findByPk(newLoan.id, {
@@ -177,7 +155,9 @@ router.post('/applications', async (req, res) => {
 // Repay from savings: withdraws from the account and records the loan payment in one DB transaction
 router.post('/:id/pay-from-savings', async (req, res) => {
   try {
-    const { withdrawal, payment } = await sequelize.transaction((transaction) => payLoanFromSavings(req.params.id, req.body, { transaction }));
+    const { withdrawal, payment, loanCleared, loanRemaining } = await sequelize.transaction((transaction) => payLoanFromSavings(req.params.id, req.body, { transaction }));
+    emailReceipt(payment, { loanRemaining, description: 'Paid from savings' });
+    if (loanCleared) emailLoanCleared(req.params.id);
     const loan = await models.Loan.findByPk(req.params.id, { include: [{ model: models.LoanSummary, as: 'summary' }] });
     res.status(201).json({ withdrawal, payment, loan });
   } catch (error) {
@@ -190,6 +170,7 @@ router.post('/:id/pay-from-savings', async (req, res) => {
 router.post('/:id/approve', async (req, res) => {
   try {
     const loan = await sequelize.transaction((transaction) => approveLoan(req.params.id, req.body, { transaction }));
+    emailLoanApproved(loan.id);
     const updated = await models.Loan.findByPk(loan.id, { include: [{ model: models.LoanSummary, as: 'summary' }] });
     res.status(200).json(updated);
   } catch (error) {
@@ -276,44 +257,8 @@ router.patch('/:id', async (req, res) => {
       return recalculateLoanSummary(id, transaction);
     });
 
-    // Email only on the transition to PAID, not on every save of a paid loan
-    if (result?.statusChangedToPaid) {
-      try {
-        const owner = (loan as any).account?.owner;
-        if (owner && owner.email) {
-          const transactions = await models.Transaction.findAll({
-            where: {
-              loanId: id,
-              type: 'LOAN_PAYMENT',
-              status: 'COMPLETED'
-            },
-            order: [['createdAt', 'ASC']]
-          });
-
-          await sendLoanCompletionEmail({
-            // email: owner.email,
-            email:'blaminsi@gmail.com',
-            name: `${owner.first_name} ${owner.last_name}`,
-            loanId: loan.id,
-            accountNumber: (loan as any).account.accountNumber,
-            loanAmount: merged.amount,
-            interestRate: merged.interestRate,
-            term: merged.term,
-            totalInterest: Number(result.summary.totalInterest),
-            totalAmount: merged.amount + Number(result.summary.totalInterest),
-            completionDate: new Date().toLocaleDateString(),
-            transactions: transactions.map(t => ({
-              date: new Date(t.createdAt).toLocaleDateString(),
-              amount: t.amount,
-              type: 'Loan Payment'
-            }))
-          });
-        }
-      } catch (emailError) {
-        console.error('Error sending loan completion email:', emailError);
-        // Don't fail the request if email fails
-      }
-    }
+    // The certificate only on the transition to PAID, not on every save of a paid loan
+    if (result?.statusChangedToPaid) emailLoanCleared(id);
 
     const updatedLoan = await models.Loan.findByPk(id);
     res.status(200).json(updatedLoan);

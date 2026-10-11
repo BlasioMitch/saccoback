@@ -57,9 +57,13 @@ export async function createTransaction(input: Record<string, any>, { transactio
     ...(recordedAt && { createdAt: recordedAt, updatedAt: recordedAt }),
   } as any, { transaction });
 
+  let loanCleared = false;
+  let loanRemaining: number | null = null;
   if (type === TransactionType.LOAN_PAYMENT && loanId) {
     // Balance = total owed - COMPLETED payments; also flips the loan to PAID when cleared
-    await recalculateLoanSummary(loanId, transaction);
+    const recalculated = await recalculateLoanSummary(loanId, transaction);
+    loanCleared = Boolean(recalculated?.statusChangedToPaid);
+    loanRemaining = recalculated ? Number(recalculated.summary.remainingBalance) : null;
   } else if (type === TransactionType.ACCOUNT_WITHDRAW || type === TransactionType.CLOSURE_WITHDRAW) {
     await account.update({ balance: balance - Number(amount) }, { transaction });
   } else if (type === TransactionType.SAVINGS_DEPOSIT) {
@@ -71,7 +75,7 @@ export async function createTransaction(input: Record<string, any>, { transactio
   // Bulk imports load history: only live transactions notify the member
   if (!allowBackdate) await notifyTransaction(newTransaction, transaction);
 
-  return { transaction: newTransaction, account };
+  return { transaction: newTransaction, account, loanCleared, loanRemaining };
 }
 
 // Repay a loan from the member's savings: a COMPLETED withdrawal from the account plus a COMPLETED
@@ -97,6 +101,6 @@ export async function payLoanFromSavings(loanId: string, input: Record<string, a
 
   const base = { accountId: account.id, amount, status: TransactionStatus.COMPLETED };
   const { transaction: withdrawal } = await createTransaction({ ...base, type: TransactionType.ACCOUNT_WITHDRAW }, { transaction });
-  const { transaction: payment } = await createTransaction({ ...base, type: TransactionType.LOAN_PAYMENT, loanId: loan.id }, { transaction });
-  return { withdrawal, payment, loan, account };
+  const { transaction: payment, loanCleared, loanRemaining } = await createTransaction({ ...base, type: TransactionType.LOAN_PAYMENT, loanId: loan.id }, { transaction });
+  return { withdrawal, payment, loan, account, loanCleared, loanRemaining };
 }

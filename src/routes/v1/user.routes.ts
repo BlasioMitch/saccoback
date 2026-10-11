@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { models } from '../../models/index.js';
 import  { AccountStatus } from '../../models/account.js';
-import { sendAccountCreationEmail } from '../../lib/mailer.js';
+import { sendInBackground, sendWelcomeEmail } from '../../lib/mailer.js';
 import { bulkHandler } from '../../lib/bulk.js';
 import { changeEmail, changePassword, createUser, findUserByEmail, MAX_AVATAR_LENGTH, replaceTemporaryPassword, toUserResponse, UPDATABLE_USER_FIELDS } from '../../services/users.js';
 import { revokeDevices, startSession } from '../../services/sessions.js';
@@ -57,17 +57,7 @@ router.post('/', async (req, res) => {
   try {
     const newUser = await createUser(req.body);
 
-    // Send welcome email
-    try {
-      await sendAccountCreationEmail({
-        email: 'blaminsi@gmail.com',
-        name: newUser.getFullName(),
-        accountId: newUser.id
-      });
-    } catch (emailError) {
-      console.error('Error sending welcome email:', emailError);
-      // Don't fail the request if email fails
-    }
+    sendInBackground('welcome', sendWelcomeEmail({ email: newUser.email, name: newUser.getFullName(), joinedAt: newUser.joinDate }));
 
     res.status(201).json(toUserResponse(newUser));
   } catch (error) {

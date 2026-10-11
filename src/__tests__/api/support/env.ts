@@ -10,3 +10,5 @@ process.env.EMAIL_PASSWORD = 'disabled-in-test';
 process.env.DEFAULT_LOAN_RATE = '10';
 process.env.WEBAUTHN_RP_ID = 'localhost';
 process.env.WEBAUTHN_ORIGINS = 'http://localhost:5173';
+// Tests check who an email is for, so the development redirect from .env must not apply
+process.env.EMAIL_REDIRECT_TO = '';

@@ -404,3 +404,6 @@ FodyWeavers.xsd
 
 # dist folder
 dist/
+# Sample output of npm run preview:documents
+previews/
+document-previews/

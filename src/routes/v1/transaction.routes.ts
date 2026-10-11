@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { models } from '../../models/index.js';
 import { recalculateLoanSummary } from '../../lib/loans.js';
-import { sendTransactionEmail } from '../../lib/mailer.js';
+import { emailLoanCleared, emailReceipt } from '../../lib/memberEmails.js';
 import { moneyFieldError } from '../../lib/money.js';
 import sequelize from '../../lib/sequelize.js';
 import { bulkHandler } from '../../lib/bulk.js';
@@ -33,30 +33,13 @@ router.get('/', async (req, res) => {
 // Create transaction
 router.post('/', async (req, res) => {
   try {
-    const { transaction: newTransaction, account } = await sequelize.transaction(
+    const { transaction: newTransaction, loanCleared, loanRemaining } = await sequelize.transaction(
       (transaction) => createTransaction(req.body, { transaction })
     );
 
-    // Send transaction email notification
-    try {
-      const owner = (account as any).owner;
-      if (owner && owner.email) {
-        await sendTransactionEmail({
-          // email: owner.email,
-          email: 'blaminsi@gmail.com',
-          name: `${owner.first_name} ${owner.last_name}`,
-          transactionId: newTransaction.id,
-          accountNumber: account.accountNumber,
-          type: newTransaction.type,
-          amount: newTransaction.amount,
-          status: newTransaction.status,
-          date: new Date().toLocaleString(),
-        });
-      }
-    } catch (emailError) {
-      console.error('Error sending transaction email:', emailError);
-      // Don't fail the request if email fails
-    }
+    // A receipt for the member (and the certificate when this repayment cleared their loan)
+    emailReceipt(newTransaction, { loanRemaining });
+    if (loanCleared && newTransaction.loanId) emailLoanCleared(newTransaction.loanId);
 
     res.status(201).json(newTransaction);
   } catch (error) {
@@ -101,7 +84,8 @@ router.patch('/:id', async (req, res) => {
     if (previous.type === 'LOAN_PAYMENT' && previous.loanId) affectedLoans.add(previous.loanId);
     if (transaction.type === 'LOAN_PAYMENT' && transaction.loanId) affectedLoans.add(transaction.loanId);
     for (const affectedLoanId of affectedLoans) {
-      await recalculateLoanSummary(affectedLoanId);
+      const recalculated = await recalculateLoanSummary(affectedLoanId);
+      if (recalculated?.statusChangedToPaid) emailLoanCleared(affectedLoanId);
     }
     // e.g. a pending deposit confirmed by staff
     if (transaction.status !== previous.status) {
